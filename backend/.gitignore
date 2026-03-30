@@ -1,0 +1,5 @@
+# Covered by root .gitignore: node_modules/, .env, data/
+# This file kept for editors/tools that look for per-directory .gitignore
+node_modules/
+.env
+data/

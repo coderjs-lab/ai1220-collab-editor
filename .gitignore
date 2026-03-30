@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Environment secrets — never commit these
+.env
+**/.env
+
+# Runtime data
+data/
+**/data/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
