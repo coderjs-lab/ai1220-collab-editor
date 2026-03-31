@@ -8,7 +8,7 @@ AI1220 Assignment 1 — Proof of Concept.
 ```
 editor/
 ├── backend/   Node.js + Express REST API (Zhengxi)
-└── frontend/  (Harman)
+└── frontend/  Vite + React + TypeScript + Tailwind PoC (Harmanjot Singh)
 ```
 
 ## Backend
@@ -114,4 +114,62 @@ created_at                    response
 
 - Real-time collaboration (WebSocket / CRDT) — planned for a later milestone
 - LLM API calls in `/ai/suggest`
-- Frontend
+- Share management UI
+- Version history UI
+- Export UI
+
+## Frontend
+
+### Stack
+
+| Concern | Choice |
+|---------|--------|
+| Build tool | Vite |
+| UI | React 19 + TypeScript |
+| Routing | React Router |
+| Styling | Tailwind CSS 4 + custom CSS variables |
+
+### Setup
+
+```bash
+cd frontend
+cp .env.example .env.local
+npm install
+npm run dev               # http://localhost:5173
+```
+
+Set the frontend API base URL in `.env.local`:
+
+```bash
+VITE_API_BASE_URL=http://localhost:3001/api
+```
+
+The backend must already be running so the frontend can restore JWT sessions and load documents.
+
+### Implemented frontend routes
+
+| Route | Purpose |
+|-------|---------|
+| `/login` | Login screen using `POST /api/auth/login` |
+| `/register` | Registration screen using `POST /api/auth/register` |
+| `/documents` | Authenticated dashboard using `GET /api/documents` and `POST /api/documents` |
+| `/documents/:id` | Editor shell using `GET /api/documents/:id` and `PUT /api/documents/:id` |
+
+### Current frontend PoC scope
+
+- Register, login, and restore a saved JWT session
+- List owned and shared documents
+- Create a document
+- Open a document in a plain-text editor shell
+- Save title/content changes manually
+- Render explicit read-only UI for viewer access
+- Show visible loading, auth, access, not-found, and server-error states
+
+### Frontend limitations in this milestone
+
+- No rich-text editor
+- No realtime collaboration UI
+- No AI suggestion UI
+- No share-management screen
+- No version history screen
+- No autosave
