@@ -1,12 +1,16 @@
 import {
   type AuthResponse,
   type CreateDocumentRequest,
+  type DeleteDocumentResponse,
   type DocumentDetailResponse,
   type DocumentListResponse,
   type DocumentResponse,
+  type DocumentVersionsResponse,
   type LoginRequest,
   type MeResponse,
   type RegisterRequest,
+  type ShareDocumentRequest,
+  type ShareDocumentResponse,
   type UpdateDocumentRequest,
 } from '../types/api';
 import { clearStoredToken, getStoredToken } from './storage';
@@ -118,6 +122,26 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(body),
       });
+    },
+    remove(id: string) {
+      return request<DeleteDocumentResponse>(`/documents/${id}`, {
+        method: 'DELETE',
+      });
+    },
+    share(id: string, body: ShareDocumentRequest) {
+      return request<ShareDocumentResponse>(`/documents/${id}/share`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    revokeShare(id: string, userId: number) {
+      return request<DeleteDocumentResponse>(`/documents/${id}/share/${userId}`, {
+        method: 'DELETE',
+      });
+    },
+    versions(id: string, includeFull = false) {
+      const query = includeFull ? '?full=1' : '';
+      return request<DocumentVersionsResponse>(`/documents/${id}/versions${query}`);
     },
   },
 };

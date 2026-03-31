@@ -20,6 +20,15 @@ export interface ApiCollaborator {
   role: 'viewer' | 'editor';
 }
 
+export interface ApiVersion {
+  id: number;
+  document_id: number;
+  created_by: number;
+  created_at: string;
+  created_by_username: string;
+  content?: string;
+}
+
 export interface AuthResponse {
   user: ApiUser;
   token: string;
@@ -42,9 +51,29 @@ export interface DocumentDetailResponse {
   collaborators: ApiCollaborator[];
 }
 
+export interface DocumentVersionsResponse {
+  versions: ApiVersion[];
+}
+
 export interface UpdateDocumentRequest {
   title?: string;
   content?: string;
+}
+
+export interface ShareDocumentRequest {
+  email: string;
+  role: 'viewer' | 'editor';
+}
+
+export interface ShareDocumentResponse {
+  permission: {
+    user: ApiUser;
+    role: 'viewer' | 'editor';
+  };
+}
+
+export interface DeleteDocumentResponse {
+  message: string;
 }
 
 export interface RegisterRequest {

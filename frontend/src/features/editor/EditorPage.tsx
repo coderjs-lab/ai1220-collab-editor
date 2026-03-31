@@ -1,19 +1,41 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useAuth } from '../../app/AuthProvider';
 import { AppShell } from '../../components/AppShell';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
-import { InputField, TextareaField } from '../../components/Field';
+import { InputField, SelectField, TextareaField } from '../../components/Field';
 import { StatusBanner } from '../../components/StatusBanner';
 import { api, ApiError } from '../../services/api';
-import type { ApiCollaborator, ApiDocument } from '../../types/api';
-import { formatRelativeTimestamp } from '../../utils/format';
-import { useAuth } from '../../app/AuthProvider';
+import type {
+  ApiCollaborator,
+  ApiDocument,
+  ApiVersion,
+} from '../../types/api';
+import {
+  countWords,
+  formatCalendarTimestamp,
+  formatCount,
+  formatRelativeTimestamp,
+} from '../../utils/format';
+import { useUnsavedChangesPrompt } from './useUnsavedChangesPrompt';
 
 type EditorLoadState = 'loading' | 'ready' | 'forbidden' | 'notFound' | 'error';
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type AccessRole = 'owner' | 'editor' | 'viewer';
+type ShareRole = 'viewer' | 'editor';
 
-function PermissionPill({ role }: { role: 'owner' | 'editor' | 'viewer' }) {
+function sortCollaborators(collaborators: ApiCollaborator[]) {
+  return [...collaborators].sort((left, right) => {
+    if (left.role !== right.role) {
+      return left.role === 'editor' ? -1 : 1;
+    }
+
+    return left.username.localeCompare(right.username);
+  });
+}
+
+function PermissionPill({ role }: { role: AccessRole }) {
   const classes =
     role === 'owner'
       ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
@@ -24,9 +46,174 @@ function PermissionPill({ role }: { role: 'owner' | 'editor' | 'viewer' }) {
   const label = role === 'owner' ? 'Owner' : role === 'editor' ? 'Can edit' : 'View only';
 
   return (
-    <span className={['rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]', classes].join(' ')}>
+    <span
+      className={[
+        'rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
+        classes,
+      ].join(' ')}
+    >
       {label}
     </span>
+  );
+}
+
+function SaveStatePill({
+  saveState,
+  isDirty,
+  canEdit,
+}: {
+  saveState: SaveState;
+  isDirty: boolean;
+  canEdit: boolean;
+}) {
+  let className = 'border-[color:var(--border)] bg-white/75 text-[color:var(--text-soft)]';
+  let label = 'Synced';
+
+  if (!canEdit) {
+    className = 'border-amber-200 bg-amber-50 text-amber-900';
+    label = 'Read only';
+  } else if (saveState === 'saving') {
+    className = 'border-teal-200 bg-teal-50 text-teal-950';
+    label = 'Saving';
+  } else if (saveState === 'error') {
+    className = 'border-red-200 bg-red-50 text-red-700';
+    label = 'Save failed';
+  } else if (isDirty) {
+    className = 'border-[color:var(--border-strong)] bg-[color:var(--teal-soft)] text-teal-900';
+    label = 'Unsaved';
+  }
+
+  return (
+    <span
+      className={[
+        'rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
+        className,
+      ].join(' ')}
+    >
+      {label}
+    </span>
+  );
+}
+
+function MetaChip({ children }: { children: string }) {
+  return (
+    <span className="rounded-full border border-[color:var(--border)] bg-white/75 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
+      {children}
+    </span>
+  );
+}
+
+function VersionHistoryPanel({
+  versions,
+  selectedVersionId,
+  isLoading,
+  error,
+  copyMessage,
+  onRetry,
+  onSelectVersion,
+  onCopySnapshot,
+}: {
+  versions: ApiVersion[];
+  selectedVersionId: number | null;
+  isLoading: boolean;
+  error: string | null;
+  copyMessage: string | null;
+  onRetry: () => void;
+  onSelectVersion: (versionId: number) => void;
+  onCopySnapshot: (version: ApiVersion) => void;
+}) {
+  const activeVersion =
+    versions.find((version) => version.id === selectedVersionId) ?? versions[0] ?? null;
+
+  return (
+    <section className="shell-card rounded-[32px] p-5">
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
+          Version history
+        </p>
+        <h2 className="font-display text-3xl font-semibold tracking-tight text-[color:var(--text)]">
+          Saved snapshots
+        </h2>
+        <p className="text-sm leading-6 text-[color:var(--text-soft)]">
+          Review earlier saved states without replacing the current draft.
+        </p>
+      </div>
+
+      {error ? (
+        <div className="mt-5 space-y-3">
+          <StatusBanner title={error} tone="danger" />
+          <Button onClick={onRetry} variant="secondary">
+            Retry history
+          </Button>
+        </div>
+      ) : isLoading ? (
+        <div className="mt-5 rounded-[24px] border border-[color:var(--border)] bg-white/75 px-4 py-5 text-sm leading-6 text-[color:var(--text-soft)]">
+          Loading saved versions...
+        </div>
+      ) : versions.length === 0 ? (
+        <div className="mt-5 rounded-[24px] border border-[color:var(--border)] bg-white/75 px-4 py-5 text-sm leading-6 text-[color:var(--text-soft)]">
+          No saved versions yet. A new snapshot appears after a content save replaces previous text.
+        </div>
+      ) : (
+        <div className="mt-5 space-y-4">
+          <div className="space-y-3">
+            {versions.map((version) => (
+              <button
+                key={version.id}
+                className={[
+                  'w-full rounded-[24px] border px-4 py-3 text-left transition',
+                  selectedVersionId === version.id
+                    ? 'border-[color:var(--border-strong)] bg-[color:var(--teal-soft)]'
+                    : 'border-[color:var(--border)] bg-white/80 hover:bg-white',
+                ].join(' ')}
+                onClick={() => onSelectVersion(version.id)}
+                type="button"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[color:var(--text)]">
+                      {version.created_by_username}
+                    </p>
+                    <p className="text-sm text-[color:var(--text-soft)]">
+                      {formatRelativeTimestamp(version.created_at)}
+                    </p>
+                  </div>
+                  <span className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
+                    Version #{version.id}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {activeVersion ? (
+            <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-[color:var(--text)]">
+                    Snapshot preview
+                  </p>
+                  <p className="text-sm text-[color:var(--text-soft)]">
+                    {formatCalendarTimestamp(activeVersion.created_at)}
+                  </p>
+                </div>
+                <Button onClick={() => onCopySnapshot(activeVersion)} variant="ghost">
+                  Copy snapshot
+                </Button>
+              </div>
+
+              {copyMessage ? (
+                <p className="mt-3 text-sm text-emerald-700">{copyMessage}</p>
+              ) : null}
+
+              <div className="editor-copy mt-4 max-h-64 overflow-auto rounded-[22px] border border-[color:var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(249,247,241,0.98))] px-4 py-4 text-[15px] leading-7 whitespace-pre-wrap text-[color:var(--text)]">
+                {activeVersion.content?.trim() || 'This snapshot is empty.'}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -38,10 +225,22 @@ export function EditorPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [document, setDocument] = useState<ApiDocument | null>(null);
   const [collaborators, setCollaborators] = useState<ApiCollaborator[]>([]);
+  const [versions, setVersions] = useState<ApiVersion[]>([]);
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
+  const [versionsReloadKey, setVersionsReloadKey] = useState(0);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareRole, setShareRole] = useState<ShareRole>('viewer');
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [revokingUserId, setRevokingUserId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -50,8 +249,16 @@ export function EditorPage() {
     }
 
     let alive = true;
+
     setLoadState('loading');
     setLoadError(null);
+    setDocument(null);
+    setVersions([]);
+    setSelectedVersionId(null);
+    setCollaborators([]);
+    setShareError(null);
+    setShareMessage(null);
+    setCopyMessage(null);
 
     api.documents
       .get(id)
@@ -61,7 +268,7 @@ export function EditorPage() {
         }
 
         setDocument(response.document);
-        setCollaborators(response.collaborators);
+        setCollaborators(sortCollaborators(response.collaborators));
         setDraftTitle(response.document.title);
         setDraftContent(response.document.content);
         setLoadState('ready');
@@ -90,7 +297,7 @@ export function EditorPage() {
 
           setLoadError(error.error);
         } else {
-          setLoadError('Could not load the document from the backend.');
+          setLoadError('Could not open this document right now.');
         }
 
         setLoadState('error');
@@ -101,7 +308,62 @@ export function EditorPage() {
     };
   }, [id]);
 
-  let permission: 'owner' | 'editor' | 'viewer' = 'viewer';
+  useEffect(() => {
+    if (!document) {
+      return;
+    }
+
+    let alive = true;
+    setIsLoadingVersions(true);
+    setVersionsError(null);
+
+    api.documents
+      .versions(String(document.id), true)
+      .then((response) => {
+        if (!alive) {
+          return;
+        }
+
+        const sortedVersions = [...response.versions].sort(
+          (left, right) =>
+            new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+        );
+
+        setVersions(sortedVersions);
+        setSelectedVersionId((current) => {
+          if (current && sortedVersions.some((version) => version.id === current)) {
+            return current;
+          }
+
+          return sortedVersions[0]?.id ?? null;
+        });
+      })
+      .catch((error) => {
+        if (!alive) {
+          return;
+        }
+
+        if (error instanceof ApiError && error.status === 401) {
+          return;
+        }
+
+        setVersionsError(
+          error instanceof ApiError ? error.error : 'Could not load version history.',
+        );
+      })
+      .finally(() => {
+        if (alive) {
+          setIsLoadingVersions(false);
+        }
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [document, versionsReloadKey]);
+
+  let permission: AccessRole = 'viewer';
+
   if (user && document) {
     if (document.owner_id === user.id) {
       permission = 'owner';
@@ -114,9 +376,38 @@ export function EditorPage() {
   }
 
   const canEdit = permission === 'owner' || permission === 'editor';
+  const isEditorLocked = !canEdit || saveState === 'saving';
   const isDirty = document
     ? draftTitle !== document.title || draftContent !== document.content
     : false;
+  const wordCount = countWords(draftContent);
+  const characterCount = draftContent.length;
+
+  useUnsavedChangesPrompt(canEdit && isDirty);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!canEdit || !isDirty) {
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void handleSave();
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [canEdit, isDirty, id, document, draftTitle, draftContent]);
+
+  function resetTransientMessages() {
+    setSaveState('idle');
+    setSaveError(null);
+    setShareError(null);
+    setShareMessage(null);
+    setCopyMessage(null);
+  }
 
   async function handleSave() {
     if (!id || !document || !canEdit || !isDirty) {
@@ -131,6 +422,7 @@ export function EditorPage() {
         title: draftTitle,
         content: draftContent,
       });
+
       setDocument(response.document);
       setDraftTitle(response.document.title);
       setDraftContent(response.document.content);
@@ -140,22 +432,100 @@ export function EditorPage() {
       if (error instanceof ApiError) {
         setSaveError(error.error);
       } else {
-        setSaveError('Could not save the document.');
+        setSaveError('Could not save your changes.');
       }
+    }
+  }
+
+  async function handleShare() {
+    if (!id || permission !== 'owner') {
+      return;
+    }
+
+    setIsSharing(true);
+    setShareError(null);
+    setShareMessage(null);
+
+    try {
+      const response = await api.documents.share(id, {
+        email: shareEmail.trim(),
+        role: shareRole,
+      });
+
+      setCollaborators((current) => {
+        const others = current.filter((entry) => entry.id !== response.permission.user.id);
+        return sortCollaborators([
+          ...others,
+          {
+            ...response.permission.user,
+            role: response.permission.role,
+          },
+        ]);
+      });
+      setShareEmail('');
+      setShareRole('viewer');
+      setShareMessage('Access updated successfully.');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setShareError(error.error);
+      } else {
+        setShareError('Could not update access for that collaborator.');
+      }
+    } finally {
+      setIsSharing(false);
+    }
+  }
+
+  async function handleRevoke(userId: number) {
+    if (!id || permission !== 'owner') {
+      return;
+    }
+
+    setRevokingUserId(userId);
+    setShareError(null);
+    setShareMessage(null);
+
+    try {
+      await api.documents.revokeShare(id, userId);
+      setCollaborators((current) => current.filter((entry) => entry.id !== userId));
+      setShareMessage('Access removed successfully.');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setShareError(error.error);
+      } else {
+        setShareError('Could not revoke access for that collaborator.');
+      }
+    } finally {
+      setRevokingUserId(null);
+    }
+  }
+
+  async function handleCopySnapshot(version: ApiVersion) {
+    if (!version.content) {
+      setCopyMessage('There is no snapshot text to copy.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(version.content);
+      setCopyMessage('Snapshot copied.');
+    } catch {
+      setCopyMessage('Clipboard access is unavailable in this browser.');
     }
   }
 
   if (loadState === 'loading') {
     return (
       <AppShell
-        subtitle="Fetching the selected document and collaborator list from the backend."
+        eyebrow="Document"
+        subtitle="Opening your draft and loading the latest workspace details."
         title="Loading editor"
       >
         <EmptyState
           action={<Button disabled>Loading document...</Button>}
-          description="The frontend is waiting for `GET /api/documents/:id` to return the document payload and collaborator list."
+          description="Preparing the writing workspace."
           eyebrow="Loading"
-          title="Opening the editor shell"
+          title="Opening your draft"
         />
       </AppShell>
     );
@@ -164,7 +534,8 @@ export function EditorPage() {
   if (loadState === 'forbidden') {
     return (
       <AppShell
-        subtitle="The backend denied access to this document for the current authenticated user."
+        eyebrow="Document"
+        subtitle="This document is outside your current access level."
         title="Access blocked"
       >
         <EmptyState
@@ -176,7 +547,7 @@ export function EditorPage() {
               Back to documents
             </Link>
           }
-          description="This document is outside your current permissions according to the backend authorization rules."
+          description="Ask the document owner to share access if you still need this draft."
           eyebrow="403"
           title="You do not have access to this document"
         />
@@ -187,7 +558,8 @@ export function EditorPage() {
   if (loadState === 'notFound') {
     return (
       <AppShell
-        subtitle="No document matched the requested identifier."
+        eyebrow="Document"
+        subtitle="The document you requested could not be found."
         title="Document not found"
       >
         <EmptyState
@@ -199,7 +571,7 @@ export function EditorPage() {
               Return to dashboard
             </Link>
           }
-          description="The backend returned a not-found response for this document id."
+          description="The link may be outdated, or the document may have been removed."
           eyebrow="404"
           title="This document does not exist"
         />
@@ -210,7 +582,8 @@ export function EditorPage() {
   if (loadState === 'error' || !document) {
     return (
       <AppShell
-        subtitle="The frontend could not complete the document load request."
+        eyebrow="Document"
+        subtitle="The writing workspace could not be prepared."
         title="Editor unavailable"
       >
         <EmptyState
@@ -219,9 +592,9 @@ export function EditorPage() {
               Retry load
             </Button>
           }
-          description={loadError ?? 'An unexpected error interrupted the editor flow.'}
-          eyebrow="Backend issue"
-          title="The editor could not load this document"
+          description={loadError ?? 'An unexpected error interrupted the editor.'}
+          eyebrow="Unavailable"
+          title="This document could not be opened"
         />
       </AppShell>
     );
@@ -229,12 +602,17 @@ export function EditorPage() {
 
   return (
     <AppShell
-      title={document.title}
-      subtitle="This editor is intentionally plain-text and contract-first: load, review permission state, edit if allowed, and save cleanly back to the existing backend."
       actions={
         <>
+          <Link
+            className="inline-flex items-center justify-center rounded-full border border-[color:var(--border)] bg-white/70 px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] transition hover:bg-white"
+            to="/documents"
+          >
+            Back to documents
+          </Link>
+          <SaveStatePill canEdit={canEdit} isDirty={isDirty} saveState={saveState} />
           <PermissionPill role={permission} />
-          <Button onClick={handleSave} disabled={!canEdit || !isDirty || saveState === 'saving'}>
+          <Button onClick={() => void handleSave()} disabled={!canEdit || !isDirty || saveState === 'saving'}>
             {saveState === 'saving'
               ? 'Saving...'
               : canEdit
@@ -245,18 +623,16 @@ export function EditorPage() {
           </Button>
         </>
       }
+      eyebrow="Document"
+      subtitle="Write in a focused plain-text workspace, manage access, and review earlier saved states."
+      title={draftTitle || 'Untitled'}
     >
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-5">
           {!canEdit ? (
-            <StatusBanner title="This document is view-only for your current role." tone="warning">
-              The frontend disables editing because the collaborator list indicates viewer access.
-            </StatusBanner>
-          ) : null}
-
-          {saveState === 'saved' ? (
-            <StatusBanner title="Changes saved successfully." tone="success">
-              The current document state came back from `PUT /api/documents/:id`.
+            <StatusBanner title="This document is read-only for your current access level." tone="warning">
+              You can review the latest content and saved versions, but only the owner or an editor
+              can make changes.
             </StatusBanner>
           ) : null}
 
@@ -265,41 +641,43 @@ export function EditorPage() {
           ) : null}
 
           <section className="shell-card-strong rounded-[32px] p-5 sm:p-6">
-            <div className="mb-6 flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
-              <span>Document #{document.id}</span>
-              <span className="h-1 w-1 rounded-full bg-slate-300" />
-              <span>Updated {formatRelativeTimestamp(document.updated_at)}</span>
-              <span className="h-1 w-1 rounded-full bg-slate-300" />
-              <span>{isDirty ? 'Unsaved local changes' : 'In sync with backend'}</span>
+            <div className="mb-6 flex flex-wrap gap-2">
+              <MetaChip>{`Doc #${document.id}`}</MetaChip>
+              <MetaChip>{`Updated ${formatRelativeTimestamp(document.updated_at)}`}</MetaChip>
+              <MetaChip>{formatCount(wordCount, 'word')}</MetaChip>
+              <MetaChip>{formatCount(characterCount, 'character')}</MetaChip>
+              {canEdit ? <MetaChip>{'Ctrl/Cmd + S to save'}</MetaChip> : null}
             </div>
 
             <div className="space-y-5">
               <InputField
-                hint={canEdit ? 'This maps directly to the backend document title.' : 'View-only title field.'}
-                label="Document title"
+                hint={
+                  canEdit
+                    ? `Last saved ${formatCalendarTimestamp(document.updated_at)}`
+                    : 'This title is view-only.'
+                }
+                label="Title"
                 onChange={(event) => {
+                  resetTransientMessages();
                   setDraftTitle(event.target.value);
-                  setSaveState('idle');
-                  setSaveError(null);
                 }}
-                readOnly={!canEdit}
+                readOnly={isEditorLocked}
                 value={draftTitle}
               />
 
               <TextareaField
-                className="min-h-[28rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(249,247,241,0.98))]"
+                className="editor-copy min-h-[32rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,247,241,0.98))] text-[17px] leading-8"
                 hint={
                   canEdit
-                    ? 'Plain-text PoC editor. Rich text and realtime collaboration are deferred.'
-                    : 'Viewer mode uses the same document content payload, rendered read-only.'
+                    ? 'Your changes stay local until you save them.'
+                    : 'The latest saved content is shown below.'
                 }
-                label="Document content"
+                label="Content"
                 onChange={(event) => {
+                  resetTransientMessages();
                   setDraftContent(event.target.value);
-                  setSaveState('idle');
-                  setSaveError(null);
                 }}
-                readOnly={!canEdit}
+                readOnly={isEditorLocked}
                 value={draftContent}
               />
             </div>
@@ -308,26 +686,78 @@ export function EditorPage() {
 
         <aside className="space-y-5">
           <section className="shell-card rounded-[32px] p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
-              Collaborators
-            </p>
-            <h2 className="font-display mt-3 text-3xl font-semibold tracking-tight">Current access</h2>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-              This panel reflects the static collaborator payload returned by the backend today.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
+                Access
+              </p>
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-[color:var(--text)]">
+                People with access
+              </h2>
+              <p className="text-sm leading-6 text-[color:var(--text-soft)]">
+                Keep edit permissions intentional and easy to review.
+              </p>
+            </div>
+
+            {shareError ? (
+              <div className="mt-5">
+                <StatusBanner title={shareError} tone="danger" />
+              </div>
+            ) : null}
+
+            {shareMessage ? (
+              <div className="mt-5">
+                <StatusBanner title={shareMessage} tone="success" />
+              </div>
+            ) : null}
+
+            {permission === 'owner' ? (
+              <form
+                className="mt-5 space-y-4 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleShare();
+                }}
+              >
+                <InputField
+                  label="Invite by email"
+                  onChange={(event) => setShareEmail(event.target.value)}
+                  placeholder="teammate@example.com"
+                  type="email"
+                  value={shareEmail}
+                />
+                <SelectField
+                  label="Access level"
+                  onChange={(event) => setShareRole(event.target.value as ShareRole)}
+                  value={shareRole}
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="editor">Editor</option>
+                </SelectField>
+                <Button disabled={isSharing} type="submit">
+                  {isSharing ? 'Updating access...' : 'Invite or update access'}
+                </Button>
+              </form>
+            ) : (
+              <div className="mt-5 rounded-[24px] border border-[color:var(--border)] bg-white/80 px-4 py-4 text-sm leading-6 text-[color:var(--text-soft)]">
+                Access is managed by the document owner.
+              </div>
+            )}
 
             <div className="mt-5 space-y-3">
-              <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-semibold text-emerald-950">Owner</p>
-                <p className="text-sm text-emerald-800">
-                  User #{document.owner_id}
-                  {document.owner_id === user?.id ? ' (you)' : ''}
+              <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <p className="text-sm font-semibold text-emerald-950">
+                  {document.owner_id === user?.id ? 'You are the owner' : 'Owner'}
+                </p>
+                <p className="mt-1 text-sm text-emerald-800">
+                  {document.owner_id === user?.id
+                    ? `${user?.username} · ${user?.email}`
+                    : 'This document is managed by another workspace member.'}
                 </p>
               </div>
 
               {collaborators.length === 0 ? (
                 <div className="rounded-[24px] border border-[color:var(--border)] bg-white/75 px-4 py-4 text-sm leading-6 text-[color:var(--text-soft)]">
-                  No collaborator rows are currently attached to this document.
+                  No additional collaborators yet.
                 </div>
               ) : (
                 collaborators.map((collaborator) => (
@@ -335,7 +765,7 @@ export function EditorPage() {
                     key={collaborator.id}
                     className="rounded-[24px] border border-[color:var(--border)] bg-white/80 px-4 py-4"
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-[color:var(--text)]">
                           {collaborator.username}
@@ -347,22 +777,36 @@ export function EditorPage() {
                         {collaborator.role}
                       </span>
                     </div>
+
+                    {permission === 'owner' ? (
+                      <div className="mt-4">
+                        <Button
+                          disabled={revokingUserId === collaborator.id}
+                          onClick={() => void handleRevoke(collaborator.id)}
+                          variant="ghost"
+                        >
+                          {revokingUserId === collaborator.id ? 'Removing...' : 'Remove access'}
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 ))
               )}
             </div>
           </section>
 
-          <section className="shell-card rounded-[32px] p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
-              PoC notes
-            </p>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-[color:var(--text-soft)]">
-              <li>Save is manual in this slice to keep the contract and demo flow obvious.</li>
-              <li>Realtime presence, version history, sharing controls, and AI UI are deferred.</li>
-              <li>The frontend intentionally mirrors backend role limits: owner, editor, viewer.</li>
-            </ul>
-          </section>
+          <VersionHistoryPanel
+            copyMessage={copyMessage}
+            error={versionsError}
+            isLoading={isLoadingVersions}
+            onCopySnapshot={(version) => void handleCopySnapshot(version)}
+            onRetry={() => {
+              setVersionsReloadKey((current) => current + 1);
+            }}
+            onSelectVersion={setSelectedVersionId}
+            selectedVersionId={selectedVersionId}
+            versions={versions}
+          />
         </aside>
       </div>
     </AppShell>

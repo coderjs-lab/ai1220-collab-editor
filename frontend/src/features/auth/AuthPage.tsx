@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../app/AuthProvider';
 import { Button } from '../../components/Button';
 import { InputField } from '../../components/Field';
 import { StatusBanner } from '../../components/StatusBanner';
-import { useAuth } from '../../app/AuthProvider';
 import { api, ApiError } from '../../services/api';
 
 type AuthMode = 'login' | 'register';
@@ -48,6 +48,21 @@ function validate(fields: AuthFields, mode: AuthMode): AuthFieldErrors {
   return errors;
 }
 
+const featureCards = [
+  {
+    eyebrow: 'Focused',
+    title: 'Write in a calm, distraction-light workspace.',
+  },
+  {
+    eyebrow: 'Shared',
+    title: 'Control who can view or edit each document.',
+  },
+  {
+    eyebrow: 'Tracked',
+    title: 'Keep a clear trail of saved revisions as work evolves.',
+  },
+] as const;
+
 export function AuthPage({ mode }: AuthPageProps) {
   const [fields, setFields] = useState<AuthFields>(initialFields);
   const [errors, setErrors] = useState<AuthFieldErrors>({});
@@ -67,13 +82,10 @@ export function AuthPage({ mode }: AuthPageProps) {
       ? location.state.from
       : '/documents';
 
-  const heading = isRegister
-    ? 'Create your workspace account'
-    : 'Return to your shared writing desk';
-
+  const heading = isRegister ? 'Create your workspace' : 'Welcome back';
   const subheading = isRegister
-    ? 'Register with the existing backend contract, then land directly in the frontend PoC shell.'
-    : 'Sign in with your backend account to load the document dashboard and editor flow.';
+    ? 'Start a shared writing space for notes, drafts, and collaborative edits.'
+    : 'Pick up your documents, revisions, and shared work where you left off.';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -107,7 +119,7 @@ export function AuthPage({ mode }: AuthPageProps) {
       if (error instanceof ApiError) {
         setSubmitError(error.error);
       } else {
-        setSubmitError('Could not reach the backend. Check that the API is running.');
+        setSubmitError('Could not reach Draftboard right now. Try again in a moment.');
       }
     } finally {
       setIsSubmitting(false);
@@ -123,47 +135,36 @@ export function AuthPage({ mode }: AuthPageProps) {
 
   return (
     <div className="editor-texture min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-center gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-        <section className="animate-rise-in shell-card rounded-[36px] px-6 py-8 sm:px-10 sm:py-10">
-          <div className="max-w-2xl space-y-6">
+      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-center gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="animate-rise-in overflow-hidden rounded-[36px] border border-[color:var(--border)] bg-[linear-gradient(145deg,rgba(255,252,247,0.94),rgba(247,241,231,0.86))] p-6 shadow-[0_26px_80px_rgba(31,37,42,0.08)] sm:p-10">
+          <div className="max-w-2xl space-y-8">
             <div className="space-y-4">
               <p className="text-xs font-semibold uppercase tracking-[0.32em] text-[color:var(--text-soft)]">
-                Collaborative editor frontend
+                Draftboard
               </p>
               <h1 className="font-display text-5xl font-semibold leading-tight tracking-tight text-[color:var(--text)] sm:text-6xl">
-                Buildable, report-aligned collaboration.
+                Collaborative writing built for clean handoffs.
               </h1>
               <p className="max-w-xl text-lg leading-8 text-[color:var(--text-soft)]">
-                This first slice keeps the experience narrow on purpose: authentication, document
-                navigation, and one clean editor save flow against the existing backend.
+                Keep active drafts organized, share access intentionally, and stay close to the
+                latest saved version of every document.
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              <article className="rounded-[28px] border border-[color:var(--border)] bg-white/75 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-700">
-                  Contract-first
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-                  Uses the backend routes and field names exactly as implemented.
-                </p>
-              </article>
-              <article className="rounded-[28px] border border-[color:var(--border)] bg-white/75 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-700">
-                  Permission aware
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-                  Viewer access stays readable and explicit instead of breaking the editor.
-                </p>
-              </article>
-              <article className="rounded-[28px] border border-[color:var(--border)] bg-white/75 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-700">
-                  Demo ready
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-                  Narrow enough to run live during the course submission demo.
-                </p>
-              </article>
+            <div className="grid gap-4 md:grid-cols-3">
+              {featureCards.map((card) => (
+                <article
+                  key={card.eyebrow}
+                  className="rounded-[28px] border border-[color:var(--border)] bg-white/80 p-4 shadow-[0_16px_40px_rgba(31,37,42,0.04)]"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-700">
+                    {card.eyebrow}
+                  </p>
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--text-soft)]">
+                    {card.title}
+                  </p>
+                </article>
+              ))}
             </div>
           </div>
         </section>
@@ -172,7 +173,7 @@ export function AuthPage({ mode }: AuthPageProps) {
           <div className="mx-auto max-w-lg space-y-6">
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.32em] text-[color:var(--text-soft)]">
-                {isRegister ? 'Register' : 'Login'}
+                {isRegister ? 'Create account' : 'Sign in'}
               </p>
               <h2 className="font-display text-4xl font-semibold tracking-tight text-[color:var(--text)]">
                 {heading}
@@ -184,11 +185,7 @@ export function AuthPage({ mode }: AuthPageProps) {
               <StatusBanner title={auth.flashMessage} tone="warning" />
             ) : null}
 
-            {submitError ? (
-              <StatusBanner title={submitError} tone="danger">
-                The message is coming directly from the backend error response where available.
-              </StatusBanner>
-            ) : null}
+            {submitError ? <StatusBanner title={submitError} tone="danger" /> : null}
 
             <form className="space-y-4" onSubmit={handleSubmit}>
               {isRegister ? (
@@ -198,7 +195,7 @@ export function AuthPage({ mode }: AuthPageProps) {
                   label="Username"
                   name="username"
                   onChange={(event) => updateField('username', event.target.value)}
-                  placeholder="e.g. harman"
+                  placeholder="harman"
                   value={fields.username}
                 />
               ) : null}
@@ -242,7 +239,7 @@ export function AuthPage({ mode }: AuthPageProps) {
                 className="font-semibold text-teal-800 underline decoration-teal-300 underline-offset-4"
                 to={isRegister ? '/login' : '/register'}
               >
-                {isRegister ? 'Sign in here' : 'Register here'}
+                {isRegister ? 'Sign in' : 'Create one'}
               </Link>
             </p>
           </div>

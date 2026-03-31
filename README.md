@@ -8,7 +8,7 @@ AI1220 Assignment 1 — Proof of Concept.
 ```
 editor/
 ├── backend/   Node.js + Express REST API (Zhengxi)
-└── frontend/  Vite + React + TypeScript + Tailwind PoC (Harmanjot Singh)
+└── frontend/  Vite + React + TypeScript + Tailwind product-aligned UI (Harmanjot Singh)
 ```
 
 ## Backend
@@ -150,19 +150,22 @@ The backend must already be running so the frontend can restore JWT sessions and
 
 | Route | Purpose |
 |-------|---------|
-| `/login` | Login screen using `POST /api/auth/login` |
-| `/register` | Registration screen using `POST /api/auth/register` |
-| `/documents` | Authenticated dashboard using `GET /api/documents` and `POST /api/documents` |
-| `/documents/:id` | Editor shell using `GET /api/documents/:id` and `PUT /api/documents/:id` |
+| `/login` | Product-facing sign-in screen using `POST /api/auth/login` |
+| `/register` | Product-facing registration screen using `POST /api/auth/register` |
+| `/documents` | Authenticated workspace using list, create, and delete document flows |
+| `/documents/:id` | Editor workspace using load, save, share, revoke, and version-history flows |
 
-### Current frontend PoC scope
+### Current frontend scope
 
 - Register, login, and restore a saved JWT session
-- List owned and shared documents
-- Create a document
-- Open a document in a plain-text editor shell
+- Search, sort, and browse owned and shared documents
+- Create and delete owned documents
+- Open a document in a polished plain-text editor workspace
 - Save title/content changes manually
+- Manage collaborator access for owners using existing share routes
+- Review saved version history using the existing versions route
 - Render explicit read-only UI for viewer access
+- Warn before leaving with unsaved changes
 - Show visible loading, auth, access, not-found, and server-error states
 
 ### Frontend limitations in this milestone
@@ -170,6 +173,5 @@ The backend must already be running so the frontend can restore JWT sessions and
 - No rich-text editor
 - No realtime collaboration UI
 - No AI suggestion UI
-- No share-management screen
-- No version history screen
+- No version restore flow
 - No autosave
