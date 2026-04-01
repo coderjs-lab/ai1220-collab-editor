@@ -8,7 +8,7 @@ AI1220 Assignment 1 — Proof of Concept.
 ```
 editor/
 ├── backend/   Node.js + Express REST API (Zhengxi)
-└── frontend/  (Harman)
+└── frontend/  Vite + React + TypeScript + Tailwind product-aligned UI (Harmanjot Singh)
 ```
 
 ## Backend
@@ -114,4 +114,64 @@ created_at                    response
 
 - Real-time collaboration (WebSocket / CRDT) — planned for a later milestone
 - LLM API calls in `/ai/suggest`
-- Frontend
+- Share management UI
+- Version history UI
+- Export UI
+
+## Frontend
+
+### Stack
+
+| Concern | Choice |
+|---------|--------|
+| Build tool | Vite |
+| UI | React 19 + TypeScript |
+| Routing | React Router |
+| Styling | Tailwind CSS 4 + custom CSS variables |
+
+### Setup
+
+```bash
+cd frontend
+cp .env.example .env.local
+npm install
+npm run dev               # http://localhost:5173
+```
+
+Set the frontend API base URL in `.env.local`:
+
+```bash
+VITE_API_BASE_URL=http://localhost:3001/api
+```
+
+The backend must already be running so the frontend can restore JWT sessions and load documents.
+
+### Implemented frontend routes
+
+| Route | Purpose |
+|-------|---------|
+| `/login` | Product-facing sign-in screen using `POST /api/auth/login` |
+| `/register` | Product-facing registration screen using `POST /api/auth/register` |
+| `/documents` | Authenticated workspace using list, create, and delete document flows |
+| `/documents/:id` | Editor workspace using load, save, share, revoke, and version-history flows |
+
+### Current frontend scope
+
+- Register, login, and restore a saved JWT session
+- Search, sort, and browse owned and shared documents
+- Create and delete owned documents
+- Open a document in a polished plain-text editor workspace
+- Save title/content changes manually
+- Manage collaborator access for owners using existing share routes
+- Review saved version history using the existing versions route
+- Render explicit read-only UI for viewer access
+- Warn before leaving with unsaved changes
+- Show visible loading, auth, access, not-found, and server-error states
+
+### Frontend limitations in this milestone
+
+- No rich-text editor
+- No realtime collaboration UI
+- No AI suggestion UI
+- No version restore flow
+- No autosave
