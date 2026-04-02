@@ -272,6 +272,20 @@ describe('AI suggest (stub)', () => {
     assert.ok(body.history.length >= 1);
     assert.equal(body.history[0].prompt, 'Summarize this document.');
   });
+
+  test('non-collaborator cannot access AI endpoints', async () => {
+    const suggest = await req(
+      'POST', `/api/documents/${shared.docId}/ai/suggest`,
+      { token: shared.bobToken, body: { prompt: 'Try to access private doc' } }
+    );
+    assert.equal(suggest.status, 403);
+
+    const history = await req(
+      'GET', `/api/documents/${shared.docId}/ai/history`,
+      { token: shared.bobToken }
+    );
+    assert.equal(history.status, 403);
+  });
 });
 
 // ─── Delete ───────────────────────────────────────────────────────────────────

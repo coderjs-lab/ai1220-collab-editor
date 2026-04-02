@@ -7,7 +7,7 @@
 
 const express = require('express');
 const aiService = require('../services/ai');
-const docRepo = require('../repositories/documents');
+const docService = require('../services/documents');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router({ mergeParams: true });
@@ -16,8 +16,8 @@ router.use(requireAuth);
 // POST /api/documents/:id/ai/suggest
 // Body: { prompt, context? }
 router.post('/suggest', async (req, res) => {
-  const doc = docRepo.findById(req.params.id);
-  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  const { doc, error, status } = docService.resolveDoc(req.params.id, req.user.id, 'viewer');
+  if (error) return res.status(status).json({ error });
 
   const { prompt, context } = req.body;
   if (!prompt) return res.status(400).json({ error: 'prompt is required' });
@@ -28,8 +28,8 @@ router.post('/suggest', async (req, res) => {
 
 // GET /api/documents/:id/ai/history
 router.get('/history', (req, res) => {
-  const doc = docRepo.findById(req.params.id);
-  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  const { doc, error, status } = docService.resolveDoc(req.params.id, req.user.id, 'viewer');
+  if (error) return res.status(status).json({ error });
 
   res.json(aiService.getHistory(doc.id));
 });
