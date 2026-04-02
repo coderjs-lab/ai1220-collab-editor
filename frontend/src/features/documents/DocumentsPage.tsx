@@ -18,11 +18,11 @@ function DashboardMetric({
   value: string;
 }) {
   return (
-    <article className="shell-card rounded-[28px] px-5 py-4">
+    <article className="shell-card flex min-h-[10.5rem] flex-col justify-between rounded-[28px] px-5 py-4">
       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--text-soft)]">
         {label}
       </p>
-      <p className="font-display mt-3 text-3xl font-semibold tracking-tight text-[color:var(--text)]">
+      <p className="font-display mt-4 text-5xl leading-none font-semibold tracking-tight text-[color:var(--text)] sm:text-[3.75rem]">
         {value}
       </p>
     </article>
@@ -393,20 +393,14 @@ export function DocumentsPage() {
           </section>
 
           <section className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <DashboardMetric label="Total" value={formatCount(documents.length, 'document')} />
+            <DashboardMetric label="Total" value={String(documents.length)} />
             <DashboardMetric
               label="Owned"
-              value={formatCount(
-                documents.filter((document) => document.owner_id === user?.id).length,
-                'document',
-              )}
+              value={String(documents.filter((document) => document.owner_id === user?.id).length)}
             />
             <DashboardMetric
               label="Shared"
-              value={formatCount(
-                documents.filter((document) => document.owner_id !== user?.id).length,
-                'document',
-              )}
+              value={String(documents.filter((document) => document.owner_id !== user?.id).length)}
             />
           </section>
         </div>
