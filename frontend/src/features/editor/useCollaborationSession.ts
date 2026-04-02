@@ -53,6 +53,9 @@ export function useCollaborationSession(documentId: string | null) {
         }
 
         if (error instanceof ApiError && error.status === 401) {
+          setStatus('unavailable');
+          setExpiresIn(null);
+          setMessage('Your session expired. Please sign in again.');
           return;
         }
 
