@@ -121,6 +121,7 @@ created_at                    response
 | `docs/erd.mmd` | Mermaid ERD source for users/documents/permissions/versions/AI interactions |
 | `docs/erd.png` | Exported ERD image for the current backend data model |
 | `docs/c4-diagrams/` | Draw.io sources and exported C4 Level 1/2/3 diagrams |
+| `docs/adr/` | Architecture Decision Records covering sync strategy, AI context, monorepo layout, and version retention |
 | `docs/error-contract.md` | Confirmed PoC error response format and status mapping |
 
 ### What is intentionally deferred
