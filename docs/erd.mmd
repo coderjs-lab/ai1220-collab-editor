@@ -1,0 +1,51 @@
+erDiagram
+    USERS {
+        int id PK
+        string username
+        string email
+        string password_hash
+        datetime created_at
+    }
+
+    DOCUMENTS {
+        int id PK
+        string title
+        string content
+        int owner_id FK
+        datetime created_at
+        datetime updated_at
+    }
+
+    PERMISSIONS {
+        int id PK
+        int document_id FK
+        int user_id FK
+        string role
+        datetime created_at
+    }
+
+    VERSIONS {
+        int id PK
+        int document_id FK
+        string content
+        int created_by FK
+        datetime created_at
+    }
+
+    AI_INTERACTIONS {
+        int id PK
+        int document_id FK
+        int user_id FK
+        string prompt
+        string response
+        datetime created_at
+    }
+
+    USERS ||--o{ DOCUMENTS : owns
+    USERS ||--o{ PERMISSIONS : granted_to
+    DOCUMENTS ||--o{ PERMISSIONS : shared_with
+    DOCUMENTS ||--o{ VERSIONS : has_snapshots
+    USERS ||--o{ VERSIONS : created_by
+    DOCUMENTS ||--o{ AI_INTERACTIONS : has_ai_logs
+    USERS ||--o{ AI_INTERACTIONS : invoked_by
+
