@@ -1,0 +1,189 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="2v3iaSyABC9NPdda2Z7t">
+    <mxGraphModel dx="1548" dy="960" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="960" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=17;fontStyle=1;fontColor=default;" value="Draftboard — C4 Level 2: Container Diagram" vertex="1">
+          <mxGeometry height="36" width="700" x="350" y="9" as="geometry" />
+        </mxCell>
+        <mxCell id="u1" parent="1" style="shape=mxgraph.c4.person2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="50" width="50" x="246" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="u1l" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=default;" value="&lt;b&gt;Document Author&lt;/b&gt;&lt;br&gt;[Person]" vertex="1">
+          <mxGeometry height="36" width="120" x="211" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="u2" parent="1" style="shape=mxgraph.c4.person2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="50" width="50" x="496" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="u2l" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=default;" value="&lt;b&gt;Collaborating Editor&lt;/b&gt;&lt;br&gt;[Person]" vertex="1">
+          <mxGeometry height="36" width="120" x="461" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="u3" parent="1" style="shape=mxgraph.c4.person2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="50" width="50" x="746" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="u3l" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=default;" value="&lt;b&gt;Commenter / Viewer&lt;/b&gt;&lt;br&gt;[Person]" vertex="1">
+          <mxGeometry height="36" width="120" x="711" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="u4" parent="1" style="shape=mxgraph.c4.person2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="50" width="50" x="996" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="u4l" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=default;" value="&lt;b&gt;Workspace / Org Admin&lt;/b&gt;&lt;br&gt;[Person]" vertex="1">
+          <mxGeometry height="36" width="120" x="961" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="boundary" parent="1" style="swimlane;startSize=28;fillColor=none;strokeColor=#666666;dashed=1;strokeWidth=2;fontStyle=1;fontSize=12;fontColor=default;arcSize=4;swimlaneLine=1;" value="Draftboard [System Boundary]" vertex="1">
+          <mxGeometry height="500" width="1060" x="161" y="212" as="geometry" />
+        </mxCell>
+        <mxCell id="spa" parent="boundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;React SPA&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Container: React 19 + Vite + TypeScript + Tailwind CSS 4]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Browser-side UI; auth via JWT in localStorage; typed API contract via types/api.ts. Port 5173." vertex="1">
+          <mxGeometry height="120" width="194" x="60" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="boundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;Express REST API&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Container: Node.js ≥22 + Express 4]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Stateless; JWT auth; routes: auth, documents, access, session, AI. Embeds llm_client &amp;amp; cache_client stubs. Port 3001." vertex="1">
+          <mxGeometry height="122" width="211" x="430" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="db" parent="boundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;SQLite Database&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Container: node:sqlite, file: ./data/editor.db]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Stores users, documents, permissions, version snapshots &amp;amp; AI logs. WAL mode; FK enforcement." vertex="1">
+          <mxGeometry height="105" width="280" x="390" y="306" as="geometry" />
+        </mxCell>
+        <mxCell id="collab" parent="boundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;dashed=1;strokeWidth=2;" value="&lt;b&gt;Collab Server&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Container: Socket.IO + Y.js CRDT — planned]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Full-duplex real-time document sync via WebSocket. Bootstraps state from DB; CRDT is authoritative during session." vertex="1">
+          <mxGeometry height="130" width="207" x="793" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e_spa_api" edge="1" parent="boundary" source="spa" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="api" value="HTTPS REST + JSON">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_db" edge="1" parent="boundary" source="api" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;entryX=0.5;entryY=0;exitX=0.476;exitY=0.999;exitDx=0;exitDy=0;exitPerimeter=0;" target="db" value="SQL (node:sqlite, prepared stmts)">
+          <mxGeometry relative="1" x="0.3132" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="530" y="200" />
+            </Array>
+            <mxPoint x="530" y="200" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_collab_db" edge="1" parent="boundary" source="collab" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=#999999;dashed=1;exitX=0.5;exitY=1;entryX=1;entryY=0.5;" target="db" value="SQL read —&amp;nbsp;&lt;div&gt;bootstrap (planned)&lt;/div&gt;">
+          <mxGeometry relative="1" x="0.1576" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_api_collab" edge="1" parent="boundary" source="api" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=#999999;dashed=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="collab" value="Issues short-lived&amp;nbsp;&lt;div&gt;JWT session token&lt;/div&gt;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_idp" edge="1" parent="boundary" source="api" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.384;exitY=1.004;entryX=0.5;entryY=0;exitDx=0;exitDy=0;exitPerimeter=0;" value="Token validation (OAuth 2.0 / HTTPS)">
+          <mxGeometry relative="1" x="0.4373" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="511" y="237" />
+              <mxPoint x="330" y="237" />
+            </Array>
+            <mxPoint x="529.9999999999998" y="220" as="sourcePoint" />
+            <mxPoint x="330" y="610" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;LLM Provider&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Cloud AI; only external system receiving document content&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="220" x="800" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="idp" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;Identity Provider&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Auth delegation; CDE validates returned tokens&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="220" x="380" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="email" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;Email / Notification Service&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Sharing invitations &amp;amp; access-change alerts&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="200" x="160" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="eu1" edge="1" parent="1" source="u1" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.5;exitY=1;entryX=0.25;entryY=0;" target="spa" value="HTTPS">
+          <mxGeometry relative="1" x="-0.114" y="-1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eu2" edge="1" parent="1" source="u2" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=-0.03;exitY=0.633;entryX=0.5;entryY=0;exitDx=0;exitDy=0;exitPerimeter=0;" target="spa" value="HTTPS">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="461" y="112" />
+              <mxPoint x="461" y="167" />
+              <mxPoint x="318" y="167" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eu3" edge="1" parent="1" source="u3" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.5;exitY=1;entryX=0.75;entryY=0;" target="spa" value="HTTPS">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="771" y="193" />
+              <mxPoint x="366" y="193" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eu4" edge="1" parent="1" source="u4" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="api" value="HTTPS">
+          <mxGeometry relative="1" x="0.171" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1021" y="261" />
+              <mxPoint x="696" y="261" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eu5" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=#999999;dashed=1;" value="WebSocket (planned)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="521" y="65" />
+              <mxPoint x="1087" y="65" />
+              <mxPoint x="1087" y="279" />
+            </Array>
+            <mxPoint x="521" y="80" as="sourcePoint" />
+            <mxPoint x="1087" y="279" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_api_llm" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=#999999;dashed=1;exitX=0.75;exitY=1;entryX=0.5;entryY=0;" target="llm" value="llm_client.complete() stub —&lt;div&gt;&amp;nbsp;HTTPS (planned)&lt;/div&gt;">
+          <mxGeometry relative="1" x="0.4115" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="749" y="443" />
+              <mxPoint x="910" y="443" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_api_email" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.276;exitY=0.994;entryX=0.5;entryY=0;exitDx=0;exitDy=0;exitPerimeter=0;" target="email" value="Invitations &amp; alerts (SMTP)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="649" y="429" />
+              <mxPoint x="397" y="429" />
+              <mxPoint x="397" y="606" />
+              <mxPoint x="260" y="606" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=default;dashed=1;" value="" vertex="1">
+          <mxGeometry height="160" width="232" x="1071" y="753" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t0" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=12;fontColor=default;" value="&lt;b&gt;Legend&lt;/b&gt;" vertex="1">
+          <mxGeometry height="18" width="100" x="1086" y="761" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_c1b" parent="1" style="fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="13" width="16" x="1086" y="785" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t1b" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=default;" value="Person / Human Actor" vertex="1">
+          <mxGeometry height="16" width="200" x="1109" y="783" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_c2b" parent="1" style="fillColor=#d5e8d4;strokeColor=#82b366;" value="" vertex="1">
+          <mxGeometry height="13" width="16" x="1086" y="806" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t2b" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=default;" value="Container (deployable unit)" vertex="1">
+          <mxGeometry height="16" width="200" x="1109" y="804" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_c2c" parent="1" style="fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="13" width="16" x="1086" y="827" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t2c" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=default;" value="Container (planned / not yet built)" vertex="1">
+          <mxGeometry height="16" width="230" x="1109" y="825" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_c3b" parent="1" style="fillColor=#f8cecc;strokeColor=#b85450;" value="" vertex="1">
+          <mxGeometry height="13" width="16" x="1086" y="848" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t3b" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=default;" value="External System" vertex="1">
+          <mxGeometry height="16" width="200" x="1109" y="846" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t4b" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=default;" value="——  Implemented relationship" vertex="1">
+          <mxGeometry height="16" width="230" x="1086" y="865" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t5b" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=default;" value="- - -  Planned / stubbed relationship" vertex="1">
+          <mxGeometry height="16" width="240" x="1086" y="881" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

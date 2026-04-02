@@ -1,0 +1,111 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="SvVTeEF3uK1S3v7-bJSD">
+    <mxGraphModel dx="1829" dy="1135" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="none" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=17;fontStyle=1;fontColor=default;" value="Draftboard — C4 Level 1: System Context" vertex="1">
+          <mxGeometry height="36" width="700" x="238" y="21" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_icon" parent="1" style="shape=mxgraph.c4.person2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="56" width="56" x="116" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_lbl" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontColor=default;" value="&lt;b&gt;Document Author&lt;/b&gt;&lt;br&gt;[Person]&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Creates docs, manages sharing &amp;amp; invokes AI assistance&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="156" x="66" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_icon" parent="1" style="shape=mxgraph.c4.person2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="56" width="56" x="366" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_lbl" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontColor=default;" value="&lt;b&gt;Collaborating Editor&lt;/b&gt;&lt;br&gt;[Person]&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Invited editor; writes &amp;amp; triggers AI suggestions&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="256" x="266" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_icon" parent="1" style="shape=mxgraph.c4.person2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="56" width="56" x="616" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_lbl" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontColor=default;" value="&lt;b&gt;Commenter / Viewer&lt;/b&gt;&lt;br&gt;[Person]&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Read-only or comment access; browses version history&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="156" x="566" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_icon" parent="1" style="shape=mxgraph.c4.person2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="56" width="56" x="866" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_lbl" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontColor=default;" value="&lt;b&gt;Workspace / Org Admin&lt;/b&gt;&lt;br&gt;[Person]&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Manages workspace policies &amp;amp; role permissions&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="156" x="816" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="sys" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontColor=default;fontSize=12;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;Draftboard&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Software System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Collaborative document editor with version control, role-based access, and AI-assisted authoring." vertex="1">
+          <mxGeometry height="120" width="320" x="440" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_idp" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;Identity Provider&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Handles auth delegation; Draftboard validates returned tokens&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="210" x="100" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;LLM Provider&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Cloud AI for writing suggestions; only system receiving document content&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="210" x="395" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_email" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontColor=default;fontSize=11;arcSize=6;verticalAlign=middle;" value="&lt;b&gt;Email / Notification Service&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;Delivers sharing invitations &amp;amp; access-change alerts&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="210" x="695" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="e_p1" edge="1" parent="1" source="p1_icon" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.5;exitY=1;entryX=0.1;entryY=0;" target="sys" value="HTTPS / REST">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="144" y="261" />
+              <mxPoint x="472" y="261" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_p2" edge="1" parent="1" source="p2_icon" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.5;exitY=1;entryX=0.3;entryY=0;" target="sys" value="HTTPS / REST">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_p3" edge="1" parent="1" source="p3_icon" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.5;exitY=1;entryX=0.7;entryY=0;" target="sys" value="HTTPS / REST">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_p4" edge="1" parent="1" source="p4_icon" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.5;exitY=1;entryX=0.9;entryY=0;" target="sys" value="HTTPS / REST">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_idp" edge="1" parent="1" source="sys" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.2;exitY=1;entryX=0.5;entryY=0;" target="ext_idp" value="Token validation (OAuth 2.0)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="504" y="484" />
+              <mxPoint x="205" y="484" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_llm" edge="1" parent="1" source="sys" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="ext_llm" value="AI prompts / suggestions (HTTPS)">
+          <mxGeometry relative="1" x="0.5833" as="geometry">
+            <mxPoint y="1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_email" edge="1" parent="1" source="sys" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;fontColor=default;strokeColor=default;exitX=0.8;exitY=1;entryX=0.5;entryY=0;" target="ext_email" value="Invitations &amp; notifications (SMTP)">
+          <mxGeometry relative="1" x="0.5984" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=default;dashed=1;" value="" vertex="1">
+          <mxGeometry height="137" width="280" x="853" y="309" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=12;fontColor=default;" value="&lt;b&gt;Legend&lt;/b&gt;" vertex="1">
+          <mxGeometry height="20" width="100" x="868" y="317" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_c1" parent="1" style="fillColor=#dae8fc;strokeColor=#6c8ebf;" value="" vertex="1">
+          <mxGeometry height="14" width="18" x="868" y="343" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=default;" value="Person / Human Actor" vertex="1">
+          <mxGeometry height="18" width="210" x="893" y="341" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_c2" parent="1" style="fillColor=#fff2cc;strokeColor=#d6b656;" value="" vertex="1">
+          <mxGeometry height="14" width="18" x="868" y="367" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t2" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=default;" value="Software System (in scope)" vertex="1">
+          <mxGeometry height="18" width="210" x="893" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_c3" parent="1" style="fillColor=#f8cecc;strokeColor=#b85450;" value="" vertex="1">
+          <mxGeometry height="14" width="18" x="868" y="391" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t3" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=default;" value="External System (out of scope)" vertex="1">
+          <mxGeometry height="18" width="210" x="893" y="389" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t4" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=default;" value="→  Communication / relationship" vertex="1">
+          <mxGeometry height="18" width="240" x="868" y="413" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
