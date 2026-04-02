@@ -41,7 +41,7 @@ Each component has its own `package.json` and can be installed, built, and teste
 ### Negative
 
 - **Larger clone size.** The repository includes both frontend and backend dependencies. The `.gitignore` excludes `node_modules/`, so the clone is dominated by source code and documentation, which is small.
-- **Potential for unrelated changes in the same PR.** A frontend-only change and a documentation change could end up in the same PR. Mitigated by branch naming conventions (`feat/frontend-*`, `feat/doc-*`) and code ownership in reviews.
+- **Potential for unrelated changes in the same PR.** A frontend-only change and a documentation change could end up in the same PR. Mitigated by branch naming conventions (`feat/frontend-*`, `docs/<topic>`) and code ownership in reviews.
 - **No independent deployment.** Both components share a single `main` branch. If independent deployment were needed, we would need to configure path-based CI triggers. This is acceptable for the PoC stage.
 
 ## Alternatives Considered
