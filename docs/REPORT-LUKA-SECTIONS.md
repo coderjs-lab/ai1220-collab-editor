@@ -592,7 +592,7 @@ For a collaborative editor, the latency and granularity advantages of push-based
 When a user opens a document:
 
 1. Client loads document via REST: GET /api/documents/:id → Receives current content, metadata, and collaborator list.
-2. Client opens WebSocket: ws://host/sync/:documentId → Sends auth token in the connection handshake. Server validates token and permission level.
+2. Client opens WebSocket: wss://host/sync/:documentId → Sends auth token in the connection handshake. Server validates token and permission level.
 3. Server adds client to the document's session room → Broadcasts presence update ("User X joined") to existing clients. Sends the current presence list to the new client.
 4. Client initializes local CRDT state from the loaded document content → Ready to send and receive operations.
 
