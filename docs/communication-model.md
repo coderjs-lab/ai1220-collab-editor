@@ -32,7 +32,7 @@ When a user opens a document:
 1. Client loads document via REST:  GET /api/documents/:id
    → Receives current content, metadata, and collaborator list.
 
-2. Client opens WebSocket:  ws://host/sync/:documentId
+2. Client opens WebSocket:  wss://host/sync/:documentId  (use ws:// only for local development)
    → Sends auth token in the connection handshake.
    → Server validates token and permission level.
 
