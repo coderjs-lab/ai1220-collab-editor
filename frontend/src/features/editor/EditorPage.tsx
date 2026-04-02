@@ -6,6 +6,8 @@ import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { InputField, SelectField, TextareaField } from '../../components/Field';
 import { StatusBanner } from '../../components/StatusBanner';
+import { AIAssistantPanel } from '../ai/AIAssistantPanel';
+import { useDocumentAi } from '../ai/useDocumentAi';
 import { api, ApiError } from '../../services/api';
 import type {
   ApiCollaborator,
@@ -376,12 +378,14 @@ export function EditorPage() {
   }
 
   const canEdit = permission === 'owner' || permission === 'editor';
+  const canInvokeAi = permission === 'owner' || permission === 'editor';
   const isEditorLocked = !canEdit || saveState === 'saving';
   const isDirty = document
     ? draftTitle !== document.title || draftContent !== document.content
     : false;
   const wordCount = countWords(draftContent);
   const characterCount = draftContent.length;
+  const ai = useDocumentAi(document ? String(document.id) : null);
 
   useUnsavedChangesPrompt(canEdit && isDirty);
 
@@ -512,6 +516,18 @@ export function EditorPage() {
     } catch {
       setCopyMessage('Clipboard access is unavailable in this browser.');
     }
+  }
+
+  function handleReplaceWithSuggestion(suggestion: string) {
+    resetTransientMessages();
+    setDraftContent(suggestion);
+  }
+
+  function handleAppendSuggestion(suggestion: string) {
+    resetTransientMessages();
+    setDraftContent((current) =>
+      current.trim().length > 0 ? `${current.trimEnd()}\n\n${suggestion}` : suggestion,
+    );
   }
 
   if (loadState === 'loading') {
@@ -685,6 +701,30 @@ export function EditorPage() {
         </div>
 
         <aside className="space-y-5">
+          <AIAssistantPanel
+            canApplySuggestion={canEdit && saveState !== 'saving'}
+            canInvoke={canInvokeAi}
+            context={ai.context}
+            history={ai.history}
+            historyError={ai.historyError}
+            isLoadingHistory={ai.isLoadingHistory}
+            isSuggesting={ai.isSuggesting}
+            lastPrompt={ai.lastPrompt}
+            onAppendSuggestion={handleAppendSuggestion}
+            onContextChange={ai.setContext}
+            onDismissSuggestion={ai.clearSuggestion}
+            onPromptChange={ai.setPrompt}
+            onReplaceDraft={handleReplaceWithSuggestion}
+            onRetryHistory={ai.reloadHistory}
+            onSubmit={() => {
+              void ai.submitSuggestion();
+            }}
+            prompt={ai.prompt}
+            promptError={ai.promptError}
+            suggestError={ai.suggestError}
+            suggestion={ai.suggestion}
+          />
+
           <section className="shell-card rounded-[32px] p-5">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
