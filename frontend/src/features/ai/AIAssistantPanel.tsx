@@ -44,6 +44,7 @@ interface AIAssistantPanelProps {
   onReplaceDraft: (suggestion: string) => void;
   onAppendSuggestion: (suggestion: string) => void;
   onDismissSuggestion: () => void;
+  embedded?: boolean;
 }
 
 export function AIAssistantPanel({
@@ -66,8 +67,10 @@ export function AIAssistantPanel({
   onReplaceDraft,
   onAppendSuggestion,
   onDismissSuggestion,
+  embedded = false,
 }: AIAssistantPanelProps) {
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const containerClassName = embedded ? '' : 'shell-card rounded-[32px] p-5';
 
   useEffect(() => {
     setCopyMessage(null);
@@ -83,7 +86,7 @@ export function AIAssistantPanel({
   }
 
   return (
-    <section className="shell-card rounded-[32px] p-5">
+    <section className={containerClassName}>
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">

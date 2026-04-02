@@ -46,10 +46,11 @@ export function AppShell({
                   to="/documents"
                   className={({ isActive }) =>
                     [
-                      'rounded-full px-3 py-1.5 transition',
+                      'rounded-full px-3 py-1.5 font-semibold transform-gpu transition duration-150 ease-out',
+                      'hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.985]',
                       isActive
-                        ? 'bg-teal-900 text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)]'
-                        : 'text-[color:var(--text-soft)] hover:bg-white/80 hover:text-[color:var(--text)]',
+                        ? 'bg-teal-900 !text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)] hover:!text-white hover:shadow-[0_14px_28px_rgba(15,118,110,0.22)]'
+                        : 'text-[color:var(--text-soft)] hover:bg-white/80 hover:text-[color:var(--text)] hover:shadow-[0_12px_24px_rgba(31,37,42,0.08)]',
                     ].join(' ')
                   }
                 >

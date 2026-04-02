@@ -28,6 +28,14 @@ type EditorLoadState = 'loading' | 'ready' | 'forbidden' | 'notFound' | 'error';
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 type AccessRole = 'owner' | 'editor' | 'viewer';
 type ShareRole = 'viewer' | 'editor';
+type EditorSidebarTab = 'access' | 'history' | 'assistant' | 'collaboration';
+
+const sidebarTabs: Array<{ id: EditorSidebarTab; label: string }> = [
+  { id: 'access', label: 'Access' },
+  { id: 'history', label: 'History' },
+  { id: 'assistant', label: 'Assistant' },
+  { id: 'collaboration', label: 'Collab' },
+];
 
 function sortCollaborators(collaborators: ApiCollaborator[]) {
   return [...collaborators].sort((left, right) => {
@@ -107,6 +115,31 @@ function MetaChip({ children }: { children: string }) {
   );
 }
 
+function ToolTabButton({
+  isActive,
+  label,
+  onClick,
+}: {
+  isActive: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={[
+        'rounded-[20px] border px-3 py-2.5 text-sm font-semibold transition',
+        isActive
+          ? 'border-[color:var(--border-strong)] bg-[color:var(--teal-soft)] text-teal-950 shadow-[0_10px_24px_rgba(15,118,110,0.08)]'
+          : 'border-[color:var(--border)] bg-white/75 text-[color:var(--text-soft)] hover:bg-white hover:text-[color:var(--text)]',
+      ].join(' ')}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
 function VersionHistoryPanel({
   versions,
   selectedVersionId,
@@ -116,6 +149,7 @@ function VersionHistoryPanel({
   onRetry,
   onSelectVersion,
   onCopySnapshot,
+  embedded = false,
 }: {
   versions: ApiVersion[];
   selectedVersionId: number | null;
@@ -125,12 +159,14 @@ function VersionHistoryPanel({
   onRetry: () => void;
   onSelectVersion: (versionId: number) => void;
   onCopySnapshot: (version: ApiVersion) => void;
+  embedded?: boolean;
 }) {
   const activeVersion =
     versions.find((version) => version.id === selectedVersionId) ?? versions[0] ?? null;
+  const containerClassName = embedded ? '' : 'shell-card rounded-[32px] p-5';
 
   return (
-    <section className="shell-card rounded-[32px] p-5">
+    <section className={containerClassName}>
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
           Version history
@@ -245,6 +281,8 @@ export function EditorPage() {
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [revokingUserId, setRevokingUserId] = useState<number | null>(null);
+  const [activeSidebarTab, setActiveSidebarTab] =
+    useState<EditorSidebarTab>('access');
 
   useEffect(() => {
     if (!id) {
@@ -521,6 +559,179 @@ export function EditorPage() {
     }
   }
 
+  function renderAccessPanel() {
+    return (
+      <section className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
+            Access
+          </p>
+          <h2 className="font-display text-3xl font-semibold tracking-tight text-[color:var(--text)]">
+            People with access
+          </h2>
+          <p className="text-sm leading-6 text-[color:var(--text-soft)]">
+            Keep edit permissions intentional and easy to review.
+          </p>
+        </div>
+
+        {shareError ? (
+          <StatusBanner title={shareError} tone="danger" />
+        ) : null}
+
+        {shareMessage ? (
+          <StatusBanner title={shareMessage} tone="success" />
+        ) : null}
+
+        {permission === 'owner' ? (
+          <form
+            className="space-y-4 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleShare();
+            }}
+          >
+            <InputField
+              label="Invite by email"
+              onChange={(event) => setShareEmail(event.target.value)}
+              placeholder="teammate@example.com"
+              type="email"
+              value={shareEmail}
+            />
+            <SelectField
+              label="Access level"
+              onChange={(event) => setShareRole(event.target.value as ShareRole)}
+              value={shareRole}
+            >
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+            </SelectField>
+            <Button disabled={isSharing} type="submit">
+              {isSharing ? 'Updating access...' : 'Invite or update access'}
+            </Button>
+          </form>
+        ) : (
+          <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 px-4 py-4 text-sm leading-6 text-[color:var(--text-soft)]">
+            Access is managed by the document owner.
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-4 py-4">
+            <p className="text-sm font-semibold text-emerald-950">
+              {document.owner_id === user?.id ? 'You are the owner' : 'Owner'}
+            </p>
+            <p className="mt-1 text-sm text-emerald-800">
+              {document.owner_id === user?.id
+                ? `${user?.username} · ${user?.email}`
+                : 'This document is managed by another workspace member.'}
+            </p>
+          </div>
+
+          {collaborators.length === 0 ? (
+            <div className="rounded-[24px] border border-[color:var(--border)] bg-white/75 px-4 py-4 text-sm leading-6 text-[color:var(--text-soft)]">
+              No additional collaborators yet.
+            </div>
+          ) : (
+            collaborators.map((collaborator) => (
+              <div
+                key={collaborator.id}
+                className="rounded-[24px] border border-[color:var(--border)] bg-white/80 px-4 py-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[color:var(--text)]">
+                      {collaborator.username}
+                      {collaborator.id === user?.id ? ' (you)' : ''}
+                    </p>
+                    <p className="text-sm text-[color:var(--text-soft)]">{collaborator.email}</p>
+                  </div>
+                  <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
+                    {collaborator.role}
+                  </span>
+                </div>
+
+                {permission === 'owner' ? (
+                  <div className="mt-4">
+                    <Button
+                      disabled={revokingUserId === collaborator.id}
+                      onClick={() => void handleRevoke(collaborator.id)}
+                      variant="ghost"
+                    >
+                      {revokingUserId === collaborator.id ? 'Removing...' : 'Remove access'}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  function renderSidebarPanel() {
+    if (activeSidebarTab === 'access') {
+      return renderAccessPanel();
+    }
+
+    if (activeSidebarTab === 'history') {
+      return (
+        <VersionHistoryPanel
+          copyMessage={copyMessage}
+          embedded
+          error={versionsError}
+          isLoading={isLoadingVersions}
+          onCopySnapshot={(version) => void handleCopySnapshot(version)}
+          onRetry={() => {
+            setVersionsReloadKey((current) => current + 1);
+          }}
+          onSelectVersion={setSelectedVersionId}
+          selectedVersionId={selectedVersionId}
+          versions={versions}
+        />
+      );
+    }
+
+    if (activeSidebarTab === 'assistant') {
+      return (
+        <AIAssistantPanel
+          canApplySuggestion={canEdit && saveState !== 'saving'}
+          canInvoke={canInvokeAi}
+          context={ai.context}
+          embedded
+          history={ai.history}
+          historyError={ai.historyError}
+          isLoadingHistory={ai.isLoadingHistory}
+          isSuggesting={ai.isSuggesting}
+          lastPrompt={ai.lastPrompt}
+          onAppendSuggestion={handleAppendSuggestion}
+          onContextChange={ai.setContext}
+          onDismissSuggestion={ai.clearSuggestion}
+          onPromptChange={ai.setPrompt}
+          onReplaceDraft={handleReplaceWithSuggestion}
+          onRetryHistory={ai.reloadHistory}
+          onSubmit={() => {
+            void ai.submitSuggestion();
+          }}
+          prompt={ai.prompt}
+          promptError={ai.promptError}
+          suggestError={ai.suggestError}
+          suggestion={ai.suggestion}
+        />
+      );
+    }
+
+    return (
+      <CollaborationReadinessPanel
+        embedded
+        expiresIn={collaborationSession.expiresIn}
+        message={collaborationSession.message}
+        onRetry={collaborationSession.retry}
+        status={collaborationSession.status}
+      />
+    );
+  }
+
   function handleReplaceWithSuggestion(suggestion: string) {
     resetTransientMessages();
     setDraftContent(suggestion);
@@ -703,160 +914,38 @@ export function EditorPage() {
           </section>
         </div>
 
-        <aside className="space-y-5">
-          <AIAssistantPanel
-            canApplySuggestion={canEdit && saveState !== 'saving'}
-            canInvoke={canInvokeAi}
-            context={ai.context}
-            history={ai.history}
-            historyError={ai.historyError}
-            isLoadingHistory={ai.isLoadingHistory}
-            isSuggesting={ai.isSuggesting}
-            lastPrompt={ai.lastPrompt}
-            onAppendSuggestion={handleAppendSuggestion}
-            onContextChange={ai.setContext}
-            onDismissSuggestion={ai.clearSuggestion}
-            onPromptChange={ai.setPrompt}
-            onReplaceDraft={handleReplaceWithSuggestion}
-            onRetryHistory={ai.reloadHistory}
-            onSubmit={() => {
-              void ai.submitSuggestion();
-            }}
-            prompt={ai.prompt}
-            promptError={ai.promptError}
-            suggestError={ai.suggestError}
-            suggestion={ai.suggestion}
-          />
-
-          <CollaborationReadinessPanel
-            expiresIn={collaborationSession.expiresIn}
-            message={collaborationSession.message}
-            onRetry={collaborationSession.retry}
-            status={collaborationSession.status}
-          />
-
-          <section className="shell-card rounded-[32px] p-5">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
-                Access
-              </p>
-              <h2 className="font-display text-3xl font-semibold tracking-tight text-[color:var(--text)]">
-                People with access
-              </h2>
-              <p className="text-sm leading-6 text-[color:var(--text-soft)]">
-                Keep edit permissions intentional and easy to review.
-              </p>
-            </div>
-
-            {shareError ? (
-              <div className="mt-5">
-                <StatusBanner title={shareError} tone="danger" />
-              </div>
-            ) : null}
-
-            {shareMessage ? (
-              <div className="mt-5">
-                <StatusBanner title={shareMessage} tone="success" />
-              </div>
-            ) : null}
-
-            {permission === 'owner' ? (
-              <form
-                className="mt-5 space-y-4 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleShare();
-                }}
-              >
-                <InputField
-                  label="Invite by email"
-                  onChange={(event) => setShareEmail(event.target.value)}
-                  placeholder="teammate@example.com"
-                  type="email"
-                  value={shareEmail}
-                />
-                <SelectField
-                  label="Access level"
-                  onChange={(event) => setShareRole(event.target.value as ShareRole)}
-                  value={shareRole}
-                >
-                  <option value="viewer">Viewer</option>
-                  <option value="editor">Editor</option>
-                </SelectField>
-                <Button disabled={isSharing} type="submit">
-                  {isSharing ? 'Updating access...' : 'Invite or update access'}
-                </Button>
-              </form>
-            ) : (
-              <div className="mt-5 rounded-[24px] border border-[color:var(--border)] bg-white/80 px-4 py-4 text-sm leading-6 text-[color:var(--text-soft)]">
-                Access is managed by the document owner.
-              </div>
-            )}
-
-            <div className="mt-5 space-y-3">
-              <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-4 py-4">
-                <p className="text-sm font-semibold text-emerald-950">
-                  {document.owner_id === user?.id ? 'You are the owner' : 'Owner'}
+        <aside className="self-start xl:sticky xl:top-6">
+          <section className="shell-card rounded-[32px] p-4 sm:p-5">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
+                  Workspace tools
                 </p>
-                <p className="mt-1 text-sm text-emerald-800">
-                  {document.owner_id === user?.id
-                    ? `${user?.username} · ${user?.email}`
-                    : 'This document is managed by another workspace member.'}
+                <h2 className="font-display text-3xl font-semibold tracking-tight text-[color:var(--text)]">
+                  Switch document context fast
+                </h2>
+                <p className="text-sm leading-6 text-[color:var(--text-soft)]">
+                  Move between access, history, assistant, and collaboration without chasing a
+                  long sidebar.
                 </p>
               </div>
 
-              {collaborators.length === 0 ? (
-                <div className="rounded-[24px] border border-[color:var(--border)] bg-white/75 px-4 py-4 text-sm leading-6 text-[color:var(--text-soft)]">
-                  No additional collaborators yet.
-                </div>
-              ) : (
-                collaborators.map((collaborator) => (
-                  <div
-                    key={collaborator.id}
-                    className="rounded-[24px] border border-[color:var(--border)] bg-white/80 px-4 py-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-[color:var(--text)]">
-                          {collaborator.username}
-                          {collaborator.id === user?.id ? ' (you)' : ''}
-                        </p>
-                        <p className="text-sm text-[color:var(--text-soft)]">{collaborator.email}</p>
-                      </div>
-                      <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
-                        {collaborator.role}
-                      </span>
-                    </div>
+              <div className="grid grid-cols-2 gap-2">
+                {sidebarTabs.map((tab) => (
+                  <ToolTabButton
+                    key={tab.id}
+                    isActive={activeSidebarTab === tab.id}
+                    label={tab.label}
+                    onClick={() => setActiveSidebarTab(tab.id)}
+                  />
+                ))}
+              </div>
 
-                    {permission === 'owner' ? (
-                      <div className="mt-4">
-                        <Button
-                          disabled={revokingUserId === collaborator.id}
-                          onClick={() => void handleRevoke(collaborator.id)}
-                          variant="ghost"
-                        >
-                          {revokingUserId === collaborator.id ? 'Removing...' : 'Remove access'}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))
-              )}
+              <div className="xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
+                {renderSidebarPanel()}
+              </div>
             </div>
           </section>
-
-          <VersionHistoryPanel
-            copyMessage={copyMessage}
-            error={versionsError}
-            isLoading={isLoadingVersions}
-            onCopySnapshot={(version) => void handleCopySnapshot(version)}
-            onRetry={() => {
-              setVersionsReloadKey((current) => current + 1);
-            }}
-            onSelectVersion={setSelectedVersionId}
-            selectedVersionId={selectedVersionId}
-            versions={versions}
-          />
         </aside>
       </div>
     </AppShell>

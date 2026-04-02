@@ -56,6 +56,7 @@ interface CollaborationReadinessPanelProps {
   message: string | null;
   expiresIn: number | null;
   onRetry: () => void;
+  embedded?: boolean;
 }
 
 export function CollaborationReadinessPanel({
@@ -63,11 +64,13 @@ export function CollaborationReadinessPanel({
   message,
   expiresIn,
   onRetry,
+  embedded = false,
 }: CollaborationReadinessPanelProps) {
   const expiryLabel = formatExpiry(expiresIn);
+  const containerClassName = embedded ? '' : 'shell-card rounded-[32px] p-5';
 
   return (
-    <section className="shell-card rounded-[32px] p-5">
+    <section className={containerClassName}>
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
           Collaboration
