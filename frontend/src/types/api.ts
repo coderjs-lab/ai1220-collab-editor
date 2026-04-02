@@ -29,6 +29,14 @@ export interface ApiVersion {
   content?: string;
 }
 
+export interface ApiAiHistoryItem {
+  id: number;
+  prompt: string;
+  response: string | null;
+  created_at: string;
+  username: string;
+}
+
 export interface AuthResponse {
   user: ApiUser;
   token: string;
@@ -55,9 +63,22 @@ export interface DocumentVersionsResponse {
   versions: ApiVersion[];
 }
 
+export interface AiHistoryResponse {
+  history: ApiAiHistoryItem[];
+}
+
 export interface UpdateDocumentRequest {
   title?: string;
   content?: string;
+}
+
+export interface AiSuggestRequest {
+  prompt: string;
+  context?: string;
+}
+
+export interface AiSuggestResponse {
+  suggestion: string;
 }
 
 export interface ShareDocumentRequest {

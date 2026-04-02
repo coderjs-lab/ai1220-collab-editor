@@ -1,4 +1,7 @@
 import {
+  type AiHistoryResponse,
+  type AiSuggestRequest,
+  type AiSuggestResponse,
   type AuthResponse,
   type CreateDocumentRequest,
   type DeleteDocumentResponse,
@@ -142,6 +145,17 @@ export const api = {
     versions(id: string, includeFull = false) {
       const query = includeFull ? '?full=1' : '';
       return request<DocumentVersionsResponse>(`/documents/${id}/versions${query}`);
+    },
+  },
+  ai: {
+    suggest(documentId: string, body: AiSuggestRequest) {
+      return request<AiSuggestResponse>(`/documents/${documentId}/ai/suggest`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    history(documentId: string) {
+      return request<AiHistoryResponse>(`/documents/${documentId}/ai/history`);
     },
   },
 };

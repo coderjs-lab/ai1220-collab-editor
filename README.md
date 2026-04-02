@@ -153,7 +153,7 @@ The backend must already be running so the frontend can restore JWT sessions and
 | `/login` | Product-facing sign-in screen using `POST /api/auth/login` |
 | `/register` | Product-facing registration screen using `POST /api/auth/register` |
 | `/documents` | Authenticated workspace using list, create, and delete document flows |
-| `/documents/:id` | Editor workspace using load, save, share, revoke, and version-history flows |
+| `/documents/:id` | Editor workspace using load, save, share, revoke, version-history, and beta AI flows |
 
 ### Current frontend scope
 
@@ -164,6 +164,7 @@ The backend must already be running so the frontend can restore JWT sessions and
 - Save title/content changes manually
 - Manage collaborator access for owners using existing share routes
 - Review saved version history using the existing versions route
+- Generate beta AI suggestions and review assistant history for the current document
 - Render explicit read-only UI for viewer access
 - Warn before leaving with unsaved changes
 - Show visible loading, auth, access, not-found, and server-error states
@@ -172,6 +173,7 @@ The backend must already be running so the frontend can restore JWT sessions and
 
 - No rich-text editor
 - No realtime collaboration UI
-- No AI suggestion UI
+- AI suggestions still use the current backend stub response
+- No persistent accept/reject AI workflow
 - No version restore flow
 - No autosave
