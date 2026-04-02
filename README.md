@@ -81,6 +81,14 @@ Every `PUT` that changes `content` snapshots the previous content to `versions`.
 
 LLM integration is deferred to a later milestone.
 
+#### Collaboration Session (stub)
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| POST | `/api/documents/:id/session` | — | `{ sessionToken, expiresIn }` |
+
+Returns a short-lived stub token for future Collab Server handoff. Real WebSocket session validation is deferred.
+
 ### Data Model
 
 ```
@@ -109,13 +117,16 @@ created_at                    response
 |------|----------|
 | `docs/traceability.md` | User stories → Functional requirements → Backend components |
 | `docs/auth-design.md` | JWT auth flow, password storage, access-control model |
+| `docs/repo-structure.md` | Monorepo choice, directory layout, config, testing structure |
+| `docs/erd.mmd` | Mermaid ERD source for users/documents/permissions/versions/AI interactions |
+| `docs/error-contract.md` | Confirmed PoC error response format and status mapping |
 
 ### What is intentionally deferred
 
 - Real-time collaboration (WebSocket / CRDT) — planned for a later milestone
 - LLM API calls in `/ai/suggest`
-- Share management UI
-- Version history UI
+- Version restore endpoint and UI flow
+- Advanced share roles (commenter/admin policy model)
 - Export UI
 
 ## Frontend
@@ -179,3 +190,12 @@ The backend must already be running so the frontend can restore JWT sessions and
 - No persistent accept/reject AI workflow
 - No version restore flow
 - No autosave
+
+## QA Evidence (1 Apr Milestone)
+
+Final QA checks completed on April 2, 2026:
+
+- Backend integration tests: `23/23` passing (`npm --prefix backend test`)
+- Frontend production build: pass (`npm --prefix frontend run build`)
+
+This verifies the documented PoC path remains runnable end-to-end on current `main`.
