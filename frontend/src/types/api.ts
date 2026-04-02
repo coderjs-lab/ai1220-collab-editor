@@ -67,6 +67,11 @@ export interface AiHistoryResponse {
   history: ApiAiHistoryItem[];
 }
 
+export interface DocumentSessionResponse {
+  sessionToken: string;
+  expiresIn: number;
+}
+
 export interface UpdateDocumentRequest {
   title?: string;
   content?: string;

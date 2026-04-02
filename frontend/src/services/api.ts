@@ -8,6 +8,7 @@ import {
   type DocumentDetailResponse,
   type DocumentListResponse,
   type DocumentResponse,
+  type DocumentSessionResponse,
   type DocumentVersionsResponse,
   type LoginRequest,
   type MeResponse,
@@ -156,6 +157,13 @@ export const api = {
     },
     history(documentId: string) {
       return request<AiHistoryResponse>(`/documents/${documentId}/ai/history`);
+    },
+  },
+  sessions: {
+    create(documentId: string) {
+      return request<DocumentSessionResponse>(`/documents/${documentId}/session`, {
+        method: 'POST',
+      });
     },
   },
 };
