@@ -119,6 +119,8 @@ created_at                    response
 | `docs/auth-design.md` | JWT auth flow, password storage, access-control model |
 | `docs/repo-structure.md` | Monorepo choice, directory layout, config, testing structure |
 | `docs/erd.mmd` | Mermaid ERD source for users/documents/permissions/versions/AI interactions |
+| `docs/erd.png` | Exported ERD image for the current backend data model |
+| `docs/c4-diagrams/` | Draw.io sources and exported C4 Level 1/2/3 diagrams |
 | `docs/error-contract.md` | Confirmed PoC error response format and status mapping |
 
 ### What is intentionally deferred
