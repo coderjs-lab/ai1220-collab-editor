@@ -8,6 +8,7 @@ import { InputField, SelectField, TextareaField } from '../../components/Field';
 import { StatusBanner } from '../../components/StatusBanner';
 import { AIAssistantPanel } from '../ai/AIAssistantPanel';
 import { useDocumentAi } from '../ai/useDocumentAi';
+import { CollaborationReadinessPanel } from './CollaborationReadinessPanel';
 import { api, ApiError } from '../../services/api';
 import type {
   ApiCollaborator,
@@ -20,6 +21,7 @@ import {
   formatCount,
   formatRelativeTimestamp,
 } from '../../utils/format';
+import { useCollaborationSession } from './useCollaborationSession';
 import { useUnsavedChangesPrompt } from './useUnsavedChangesPrompt';
 
 type EditorLoadState = 'loading' | 'ready' | 'forbidden' | 'notFound' | 'error';
@@ -386,6 +388,7 @@ export function EditorPage() {
   const wordCount = countWords(draftContent);
   const characterCount = draftContent.length;
   const ai = useDocumentAi(document ? String(document.id) : null);
+  const collaborationSession = useCollaborationSession(document ? String(document.id) : null);
 
   useUnsavedChangesPrompt(canEdit && isDirty);
 
@@ -723,6 +726,13 @@ export function EditorPage() {
             promptError={ai.promptError}
             suggestError={ai.suggestError}
             suggestion={ai.suggestion}
+          />
+
+          <CollaborationReadinessPanel
+            expiresIn={collaborationSession.expiresIn}
+            message={collaborationSession.message}
+            onRetry={collaborationSession.retry}
+            status={collaborationSession.status}
           />
 
           <section className="shell-card rounded-[32px] p-5">
