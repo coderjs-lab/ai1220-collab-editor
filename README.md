@@ -120,6 +120,17 @@ created_at                    response
 | `docs/repo-structure.md` | Monorepo choice, directory layout, config, testing structure |
 | `docs/erd.mmd` | Mermaid ERD source for users/documents/permissions/versions/AI interactions |
 | `docs/error-contract.md` | Confirmed PoC error response format and status mapping |
+| `docs/architectural-drivers.md` | Ranked architectural drivers and their consequences |
+| `docs/c4-diagrams.md` | C4 Level 1 (context), Level 2 (container), Level 3 (component) in Mermaid |
+| `docs/feature-decomposition.md` | Module breakdown with responsibilities, dependencies, and interfaces |
+| `docs/ai-integration-design.md` | AI context strategy, suggestion UX, collaboration handling, prompt design, cost model |
+| `docs/communication-model.md` | Push-based sync via WebSocket, connection lifecycle, reconnection strategy |
+| `docs/nfr.md` | Non-functional requirements: latency, scalability, availability, security, usability |
+| `docs/project-management.md` | Team ownership, workflow, methodology, risk assessment, timeline |
+| `docs/adr/ADR-001-synchronization-strategy.md` | CRDT over OT for real-time sync |
+| `docs/adr/ADR-002-ai-context-strategy.md` | Tiered AI context over full-document prompts |
+| `docs/adr/ADR-003-monorepo-organization.md` | Monorepo over multi-repo |
+| `docs/adr/ADR-004-versioning-data-retention.md` | Snapshot versioning with bounded retention |
 
 ### What is intentionally deferred
 
