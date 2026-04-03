@@ -1,7 +1,70 @@
-# Collaborative Editor
+# Draftboard
 
 Real-time collaborative document editor with an integrated AI writing assistant.
 AI1220 Assignment 1 — Proof of Concept.
+
+## PoC Summary
+
+This Proof of Concept demonstrates a working end-to-end collaborative editor baseline with:
+
+- JWT-based authentication
+- document creation, editing, and deletion
+- owner-managed sharing with `viewer` and `editor` roles
+- version-history capture and inspection
+- beta AI suggestion and history flows using the current backend stub
+- collaboration-session readiness using the current backend stub
+- a product-aligned frontend that exercises the documented backend API
+
+## How To Run The PoC
+
+1. Start the backend:
+
+```bash
+cd backend
+cp .env.example .env
+npm install
+npm start
+```
+
+2. Start the frontend in a second terminal:
+
+```bash
+cd frontend
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+3. Set the frontend API base URL in `frontend/.env.local`:
+
+```bash
+VITE_API_BASE_URL=http://localhost:3001/api
+```
+
+4. Open the frontend in the browser and use:
+   - `/register` to create an account
+   - `/login` to sign in
+   - `/documents` to create, open, share, and manage documents
+
+## What The PoC Demonstrates
+
+- authenticated access to a document workspace
+- document CRUD with ownership-aware permissions
+- sharing and revoke flows backed by the current REST API
+- version-history tracking for saved document content
+- frontend support for the current AI suggestion/history endpoints
+- frontend support for the current collaboration-session readiness endpoint
+- visible loading, error, access-control, and read-only states across the app
+
+## What Is Intentionally Not Implemented Yet
+
+- live realtime collaboration with active cursor/presence sync
+- production LLM integration behind the AI assistant
+- version restore or rollback actions
+- rich-text editing
+- commenter/admin share roles
+- autosave and advanced review workflows
+- export flows
 
 ## Project Structure
 
