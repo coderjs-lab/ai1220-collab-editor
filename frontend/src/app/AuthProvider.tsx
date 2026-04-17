@@ -5,10 +5,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, ApiError } from '../services/api';
+import { api } from '../services/api';
 import {
   clearStoredToken,
-  getStoredToken,
   setStoredToken,
 } from '../services/storage';
 import type { ApiUser, AuthResponse } from '../types/api';
@@ -20,7 +19,7 @@ interface AuthContextValue {
   user: ApiUser | null;
   flashMessage: string | null;
   signIn: (response: AuthResponse) => void;
-  signOut: (message?: string) => void;
+  signOut: (message?: string) => Promise<void>;
   clearFlashMessage: () => void;
 }
 
@@ -32,25 +31,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = getStoredToken();
-    if (!token) {
-      setStatus('anonymous');
-      return;
-    }
-
     let alive = true;
 
     api.auth
-      .me()
+      .restoreSession()
       .then((response) => {
         if (!alive) {
           return;
         }
 
+        if (!response) {
+          clearStoredToken();
+          setUser(null);
+          setStatus('anonymous');
+          return;
+        }
+
+        setStoredToken(response.token);
         setUser(response.user);
         setStatus('authenticated');
+        setFlashMessage(null);
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!alive) {
           return;
         }
@@ -58,10 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearStoredToken();
         setUser(null);
         setStatus('anonymous');
-
-        if (error instanceof ApiError && error.status === 401) {
-          setFlashMessage('Your session expired. Sign in again to continue.');
-        }
       });
 
     return () => {
@@ -72,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string }>).detail;
+      clearStoredToken();
       setUser(null);
       setStatus('anonymous');
       setFlashMessage(detail?.message ?? 'Your session expired. Sign in again to continue.');
@@ -91,7 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus('authenticated');
       setFlashMessage(null);
     },
-    signOut(message) {
+    async signOut(message) {
+      try {
+        await api.auth.logout();
+      } catch {
+        // Local state must still clear if logout cannot reach the backend.
+      }
+
       clearStoredToken();
       setUser(null);
       setStatus('anonymous');

@@ -64,7 +64,12 @@ export function AppShell({
                 <p className="font-semibold text-[color:var(--text)]">{user?.username}</p>
                 <p className="text-[color:var(--text-soft)]">{user?.email}</p>
               </div>
-              <Button variant="ghost" onClick={() => signOut('You signed out of Draftboard.')}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  void signOut('You signed out of Draftboard.');
+                }}
+              >
                 Sign out
               </Button>
             </div>

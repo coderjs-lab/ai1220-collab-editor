@@ -35,6 +35,8 @@ export interface ApiAiHistoryItem {
   response: string | null;
   created_at: string;
   username: string;
+  model?: string | null;
+  status?: string | null;
 }
 
 export interface AuthResponse {
@@ -87,7 +89,7 @@ export interface AiSuggestResponse {
 }
 
 export interface ShareDocumentRequest {
-  email: string;
+  identifier: string;
   role: 'viewer' | 'editor';
 }
 
@@ -99,6 +101,10 @@ export interface ShareDocumentResponse {
 }
 
 export interface DeleteDocumentResponse {
+  message: string;
+}
+
+export interface LogoutResponse {
   message: string;
 }
 

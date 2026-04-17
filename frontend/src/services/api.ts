@@ -11,15 +11,20 @@ import {
   type DocumentSessionResponse,
   type DocumentVersionsResponse,
   type LoginRequest,
+  type LogoutResponse,
   type MeResponse,
   type RegisterRequest,
   type ShareDocumentRequest,
   type ShareDocumentResponse,
   type UpdateDocumentRequest,
 } from '../types/api';
-import { clearStoredToken, getStoredToken } from './storage';
+import {
+  clearStoredToken,
+  getStoredToken,
+  setStoredToken,
+} from './storage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
 
 export class ApiError extends Error {
   status: number;
@@ -41,11 +46,80 @@ function dispatchUnauthorized(message: string) {
   );
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getStoredToken();
-  const headers = new Headers(init?.headers);
+function getErrorMessage(payload: unknown) {
+  return payload &&
+    typeof payload === 'object' &&
+    payload !== null &&
+    'error' in payload &&
+    typeof payload.error === 'string'
+    ? payload.error
+    : 'Unexpected API error';
+}
 
-  if (!headers.has('Content-Type') && init?.body) {
+async function parsePayload<T>(response: Response): Promise<T | null> {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+let refreshPromise: Promise<AuthResponse | null> | null = null;
+
+async function refreshAccessToken(options?: {
+  suppressUnauthorizedEvent?: boolean;
+}): Promise<AuthResponse | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    const payload = await parsePayload<AuthResponse>(response);
+
+    if (!response.ok || !payload) {
+      clearStoredToken();
+      if (response.status === 401 && !options?.suppressUnauthorizedEvent) {
+        dispatchUnauthorized(getErrorMessage(payload));
+      }
+      return null;
+    }
+
+    setStoredToken(payload.token);
+    return payload;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
+}
+
+interface RequestOptions extends RequestInit {
+  retryOnUnauthorized?: boolean;
+  suppressUnauthorizedEvent?: boolean;
+  omitAuth?: boolean;
+}
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const {
+    retryOnUnauthorized = true,
+    suppressUnauthorizedEvent = false,
+    omitAuth = false,
+    ...requestInit
+  } = init ?? {};
+
+  const headers = new Headers(requestInit.headers);
+  const token = omitAuth ? null : getStoredToken();
+
+  if (!headers.has('Content-Type') && requestInit.body) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -53,35 +127,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
+  let response = await fetch(`${API_BASE_URL}${path}`, {
+    ...requestInit,
     headers,
+    credentials: 'include',
   });
+  let payload = await parsePayload<T>(response);
 
-  const text = await response.text();
-  let payload: unknown = null;
+  if (response.status === 401 && retryOnUnauthorized) {
+    const refreshed = await refreshAccessToken({ suppressUnauthorizedEvent });
+    if (refreshed) {
+      const retryHeaders = new Headers(requestInit.headers);
+      if (!retryHeaders.has('Content-Type') && requestInit.body) {
+        retryHeaders.set('Content-Type', 'application/json');
+      }
+      retryHeaders.set('Authorization', `Bearer ${refreshed.token}`);
 
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = null;
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        ...requestInit,
+        headers: retryHeaders,
+        credentials: 'include',
+      });
+      payload = await parsePayload<T>(response);
     }
   }
 
   if (!response.ok) {
-    const message =
-      payload &&
-      typeof payload === 'object' &&
-      payload !== null &&
-      'error' in payload &&
-      typeof payload.error === 'string'
-        ? payload.error
-        : 'Unexpected API error';
+    const message = getErrorMessage(payload);
 
     if (response.status === 401) {
       clearStoredToken();
-      dispatchUnauthorized(message);
+      if (!suppressUnauthorizedEvent) {
+        dispatchUnauthorized(message);
+      }
     }
 
     throw new ApiError(response.status, message);
@@ -96,16 +174,47 @@ export const api = {
       return request<AuthResponse>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(body),
+        omitAuth: true,
+        retryOnUnauthorized: false,
       });
     },
     login(body: LoginRequest) {
       return request<AuthResponse>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(body),
+        omitAuth: true,
+        retryOnUnauthorized: false,
       });
     },
     me() {
       return request<MeResponse>('/auth/me');
+    },
+    async restoreSession() {
+      const token = getStoredToken();
+
+      if (token) {
+        try {
+          const response = await request<MeResponse>('/auth/me', {
+            suppressUnauthorizedEvent: true,
+          });
+
+          return {
+            user: response.user,
+            token: getStoredToken() ?? token,
+          } satisfies AuthResponse;
+        } catch {
+          clearStoredToken();
+        }
+      }
+
+      return refreshAccessToken({ suppressUnauthorizedEvent: true });
+    },
+    logout() {
+      return request<LogoutResponse>('/auth/logout', {
+        method: 'POST',
+        retryOnUnauthorized: false,
+        suppressUnauthorizedEvent: true,
+      });
     },
   },
   documents: {
@@ -146,6 +255,11 @@ export const api = {
     versions(id: string, includeFull = false) {
       const query = includeFull ? '?full=1' : '';
       return request<DocumentVersionsResponse>(`/documents/${id}/versions${query}`);
+    },
+    restoreVersion(id: string, versionId: number) {
+      return request<DocumentResponse>(`/documents/${id}/versions/${versionId}/restore`, {
+        method: 'POST',
+      });
     },
   },
   ai: {
