@@ -4,11 +4,12 @@ import { useAuth } from '../../app/AuthProvider';
 import { AppShell } from '../../components/AppShell';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
-import { InputField, SelectField, TextareaField } from '../../components/Field';
+import { InputField, SelectField } from '../../components/Field';
 import { StatusBanner } from '../../components/StatusBanner';
 import { AIAssistantPanel } from '../ai/AIAssistantPanel';
 import { useDocumentAi } from '../ai/useDocumentAi';
-import { CollaborationReadinessPanel } from './CollaborationReadinessPanel';
+import { CollaborationPanel } from './CollaborationPanel';
+import { CollaborativeEditorAdapter } from './CollaborativeEditorAdapter';
 import { api, ApiError } from '../../services/api';
 import type {
   ApiCollaborator,
@@ -22,6 +23,8 @@ import {
   formatRelativeTimestamp,
 } from '../../utils/format';
 import { useCollaborationSession } from './useCollaborationSession';
+import { richTextToPlainText } from './richText';
+import { useCollaborativeEditor } from './useCollaborativeEditor';
 import { useUnsavedChangesPrompt } from './useUnsavedChangesPrompt';
 
 type EditorLoadState = 'loading' | 'ready' | 'forbidden' | 'notFound' | 'error';
@@ -247,7 +250,7 @@ function VersionHistoryPanel({
               ) : null}
 
               <div className="editor-copy mt-4 max-h-64 overflow-auto rounded-[22px] border border-[color:var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(249,247,241,0.98))] px-4 py-4 text-[15px] leading-7 whitespace-pre-wrap text-[color:var(--text)]">
-                {activeVersion.content?.trim() || 'This snapshot is empty.'}
+                {richTextToPlainText(activeVersion.content) || 'This snapshot is empty.'}
               </div>
             </div>
           ) : null}
@@ -272,9 +275,6 @@ export function EditorPage() {
   const [versionsReloadKey, setVersionsReloadKey] = useState(0);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
-  const [draftContent, setDraftContent] = useState('');
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [shareEmail, setShareEmail] = useState('');
   const [shareRole, setShareRole] = useState<ShareRole>('viewer');
   const [shareError, setShareError] = useState<string | null>(null);
@@ -312,10 +312,7 @@ export function EditorPage() {
         setDocument(response.document);
         setCollaborators(sortCollaborators(response.collaborators));
         setDraftTitle(response.document.title);
-        setDraftContent(response.document.content);
         setLoadState('ready');
-        setSaveState('idle');
-        setSaveError(null);
       })
       .catch((error) => {
         if (!alive) {
@@ -419,14 +416,24 @@ export function EditorPage() {
 
   const canEdit = permission === 'owner' || permission === 'editor';
   const canInvokeAi = permission === 'owner' || permission === 'editor';
-  const isEditorLocked = !canEdit || saveState === 'saving';
-  const isDirty = document
-    ? draftTitle !== document.title || draftContent !== document.content
-    : false;
-  const wordCount = countWords(draftContent);
-  const characterCount = draftContent.length;
   const ai = useDocumentAi(document ? String(document.id) : null);
   const collaborationSession = useCollaborationSession(document ? String(document.id) : null);
+  const collaborativeEditor = useCollaborativeEditor({
+    documentId: document ? String(document.id) : null,
+    document,
+    session: collaborationSession.session,
+    title: draftTitle,
+    canEdit,
+    currentUser: user,
+    onPersisted: (nextDocument) => {
+      setDocument(nextDocument);
+      setDraftTitle(nextDocument.title);
+      setVersionsReloadKey((current) => current + 1);
+    },
+  });
+  const isDirty = collaborativeEditor.isDirty;
+  const wordCount = countWords(collaborativeEditor.plainText);
+  const characterCount = collaborativeEditor.plainText.length;
 
   useUnsavedChangesPrompt(canEdit && isDirty);
 
@@ -444,11 +451,10 @@ export function EditorPage() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canEdit, isDirty, id, document, draftTitle, draftContent]);
+  }, [canEdit, isDirty, collaborativeEditor, draftTitle]);
 
   function resetTransientMessages() {
-    setSaveState('idle');
-    setSaveError(null);
+    collaborativeEditor.clearTransientSaveState();
     setShareError(null);
     setShareMessage(null);
     setCopyMessage(null);
@@ -459,27 +465,7 @@ export function EditorPage() {
       return;
     }
 
-    setSaveState('saving');
-    setSaveError(null);
-
-    try {
-      const response = await api.documents.update(id, {
-        title: draftTitle,
-        content: draftContent,
-      });
-
-      setDocument(response.document);
-      setDraftTitle(response.document.title);
-      setDraftContent(response.document.content);
-      setSaveState('saved');
-    } catch (error) {
-      setSaveState('error');
-      if (error instanceof ApiError) {
-        setSaveError(error.error);
-      } else {
-        setSaveError('Could not save your changes.');
-      }
-    }
+    await collaborativeEditor.persistSnapshot();
   }
 
   async function handleShare() {
@@ -546,13 +532,14 @@ export function EditorPage() {
   }
 
   async function handleCopySnapshot(version: ApiVersion) {
-    if (!version.content) {
+    const plainText = richTextToPlainText(version.content);
+    if (!plainText) {
       setCopyMessage('There is no snapshot text to copy.');
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(version.content);
+      await navigator.clipboard.writeText(plainText);
       setCopyMessage('Snapshot copied.');
     } catch {
       setCopyMessage('Clipboard access is unavailable in this browser.');
@@ -695,7 +682,7 @@ export function EditorPage() {
     if (activeSidebarTab === 'assistant') {
       return (
         <AIAssistantPanel
-          canApplySuggestion={canEdit && saveState !== 'saving'}
+          canApplySuggestion={canEdit && collaborativeEditor.saveState !== 'saving'}
           canInvoke={canInvokeAi}
           context={ai.context}
           embedded
@@ -722,26 +709,30 @@ export function EditorPage() {
     }
 
     return (
-      <CollaborationReadinessPanel
+      <CollaborationPanel
         embedded
-        expiresIn={collaborationSession.expiresIn}
-        message={collaborationSession.message}
-        onRetry={collaborationSession.retry}
-        status={collaborationSession.status}
+        message={collaborativeEditor.connectionMessage ?? collaborationSession.message}
+        onRetrySession={collaborationSession.retry}
+        presenceUsers={collaborativeEditor.presenceUsers}
+        state={
+          collaborationSession.status === 'loading'
+            ? 'connecting'
+            : collaborationSession.status === 'unavailable'
+              ? 'error'
+              : collaborativeEditor.connectionState
+        }
       />
     );
   }
 
   function handleReplaceWithSuggestion(suggestion: string) {
     resetTransientMessages();
-    setDraftContent(suggestion);
+    collaborativeEditor.replaceWithSuggestion(suggestion);
   }
 
   function handleAppendSuggestion(suggestion: string) {
     resetTransientMessages();
-    setDraftContent((current) =>
-      current.trim().length > 0 ? `${current.trimEnd()}\n\n${suggestion}` : suggestion,
-    );
+    collaborativeEditor.appendSuggestion(suggestion);
   }
 
   if (loadState === 'loading') {
@@ -840,10 +831,17 @@ export function EditorPage() {
           >
             Back to documents
           </Link>
-          <SaveStatePill canEdit={canEdit} isDirty={isDirty} saveState={saveState} />
+          <SaveStatePill
+            canEdit={canEdit}
+            isDirty={isDirty}
+            saveState={collaborativeEditor.saveState}
+          />
           <PermissionPill role={permission} />
-          <Button onClick={() => void handleSave()} disabled={!canEdit || !isDirty || saveState === 'saving'}>
-            {saveState === 'saving'
+          <Button
+            disabled={!canEdit || !isDirty || collaborativeEditor.saveState === 'saving'}
+            onClick={() => void handleSave()}
+          >
+            {collaborativeEditor.saveState === 'saving'
               ? 'Saving...'
               : canEdit
                 ? isDirty
@@ -854,7 +852,7 @@ export function EditorPage() {
         </>
       }
       eyebrow="Document"
-      subtitle="Write in a focused plain-text workspace, manage access, and review earlier saved states."
+      subtitle="Collaborate in a shared editor, manage access, and review earlier saved states."
       title={draftTitle || 'Untitled'}
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
@@ -866,8 +864,21 @@ export function EditorPage() {
             </StatusBanner>
           ) : null}
 
-          {saveState === 'error' && saveError ? (
-            <StatusBanner title={saveError} tone="danger" />
+          {collaborativeEditor.connectionState === 'reconnecting' ? (
+            <StatusBanner
+              title="The collaboration session is reconnecting."
+              tone="warning"
+            >
+              Live updates will resume automatically when the socket reconnects.
+            </StatusBanner>
+          ) : null}
+
+          {collaborativeEditor.connectionState === 'error' && collaborativeEditor.connectionMessage ? (
+            <StatusBanner title={collaborativeEditor.connectionMessage} tone="danger" />
+          ) : null}
+
+          {collaborativeEditor.saveState === 'error' && collaborativeEditor.saveError ? (
+            <StatusBanner title={collaborativeEditor.saveError} tone="danger" />
           ) : null}
 
           <section className="shell-card-strong rounded-[32px] p-5 sm:p-6">
@@ -876,6 +887,7 @@ export function EditorPage() {
               <MetaChip>{`Updated ${formatRelativeTimestamp(document.updated_at)}`}</MetaChip>
               <MetaChip>{formatCount(wordCount, 'word')}</MetaChip>
               <MetaChip>{formatCount(characterCount, 'character')}</MetaChip>
+              <MetaChip>{`Session ${collaborativeEditor.connectionState}`}</MetaChip>
               {canEdit ? <MetaChip>{'Ctrl/Cmd + S to save'}</MetaChip> : null}
             </div>
 
@@ -891,24 +903,14 @@ export function EditorPage() {
                   resetTransientMessages();
                   setDraftTitle(event.target.value);
                 }}
-                readOnly={isEditorLocked}
+                readOnly={!canEdit || collaborativeEditor.saveState === 'saving'}
                 value={draftTitle}
               />
 
-              <TextareaField
-                className="editor-copy min-h-[32rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,247,241,0.98))] text-[17px] leading-8"
-                hint={
-                  canEdit
-                    ? 'Your changes stay local until you save them.'
-                    : 'The latest saved content is shown below.'
-                }
-                label="Content"
-                onChange={(event) => {
-                  resetTransientMessages();
-                  setDraftContent(event.target.value);
-                }}
-                readOnly={isEditorLocked}
-                value={draftContent}
+              <CollaborativeEditorAdapter
+                editor={collaborativeEditor.editor}
+                hint="Live edits sync through the shared collaboration channel. Save when you want to checkpoint the current draft."
+                readOnly={!canEdit}
               />
             </div>
           </section>

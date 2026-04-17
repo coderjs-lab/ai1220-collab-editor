@@ -1,267 +1,249 @@
 # Draftboard
 
-Real-time collaborative document editor with an integrated AI writing assistant.
-AI1220 Assignment 1 — Proof of Concept.
+Draftboard is a collaborative document editor for AI1220. This branch implements the **realtime collaboration slice** for Assignment 2 on top of a new **FastAPI + React** foundation, while keeping clear ownership boundaries with the parallel **core-app** and **AI** branches.
 
-## PoC Summary
+## What This Branch Demonstrates
 
-This Proof of Concept demonstrates a working end-to-end collaborative editor baseline with:
+This branch demonstrates:
 
-- JWT-based authentication
-- document creation, editing, and deletion
-- owner-managed sharing with `viewer` and `editor` roles
-- version-history capture and inspection
-- beta AI suggestion and history flows using the current backend stub
-- collaboration-session readiness using the current backend stub
-- a product-aligned frontend that exercises the documented backend API
+- FastAPI backend foundation for the collaboration slice
+- JWT-based REST auth reused by the collaboration workflow
+- document-scoped collaboration session issuance
+- authenticated websocket collaboration endpoint at `/ws/collab/{document_id}`
+- Yjs / ypy-websocket based shared document sync
+- Tiptap-based collaborative editor adapter in the React frontend
+- remote presence metadata and collaboration connection-state UI
+- manual snapshot persistence of the shared draft through the existing document update route
+- explicit contract and deviation documentation for parallel team delivery
 
-## How To Run The PoC
+## What This Branch Intentionally Does Not Finalize Yet
 
-1. Start the backend:
+This branch does **not** claim ownership of the full Assignment 2 app.
 
-```bash
-cd backend
-cp .env.example .env
-npm install
-npm start
-```
+Still owned by parallel teammate branches:
 
-2. Start the frontend in a second terminal:
+- final core-app editor shell and autosave policy
+- final version-restore UX
+- full auth lifecycle polish beyond what collaboration needs
+- AI streaming backend and final AI assistant workflow
 
-```bash
-cd frontend
-cp .env.example .env.local
-npm install
-npm run dev
-```
+Intentionally deferred on this branch:
 
-3. Set the frontend API base URL in `frontend/.env.local`:
+- Redis-backed multi-instance collaboration fan-out
+- distributed room coordination
+- production LLM integration
+- final version restore pipeline
+- final merged UI after all team branches land
 
-```bash
-VITE_API_BASE_URL=http://localhost:3001/api
-```
+## Realtime Collaboration Contract
 
-4. Open the frontend in the browser and use:
-   - `/register` to create an account
-   - `/login` to sign in
-   - `/documents` to create, open, share, and manage documents
+The collaboration-facing interface is frozen in:
 
-## What The PoC Demonstrates
+- [docs/realtime-contract.md](docs/realtime-contract.md)
 
-- authenticated access to a document workspace
-- document CRUD with ownership-aware permissions
-- sharing and revoke flows backed by the current REST API
-- version-history tracking for saved document content
-- frontend support for the current AI suggestion/history endpoints
-- frontend support for the current collaboration-session readiness endpoint
-- visible loading, error, access-control, and read-only states across the app
+This is the contract the AI, core-app, and collaboration branches should code against in parallel.
 
-## What Is Intentionally Not Implemented Yet
+## Architecture Deviations
 
-- live realtime collaboration with active cursor/presence sync
-- production LLM integration behind the AI assistant
-- version restore or rollback actions
-- rich-text editing
-- commenter/admin share roles
-- autosave and advanced review workflows
-- export flows
+Implementation differences from the Assignment 1 report are documented in:
 
-## Project Structure
+- [DEVIATIONS.md](DEVIATIONS.md)
 
-```
-editor/
-├── backend/   Node.js + Express REST API (Zhengxi)
-└── frontend/  Vite + React + TypeScript + Tailwind product-aligned UI (Harmanjot Singh)
-```
+Each deviation records:
 
-## Backend
+- what changed
+- why it changed
+- whether it was an improvement or a compromise
 
-### Stack
+## Stack
+
+### Backend
 
 | Concern | Choice |
 |---------|--------|
-| Runtime | Node.js ≥ 22 |
-| Framework | Express 4 |
-| Database | SQLite via built-in `node:sqlite` |
-| Auth | JWT (7-day expiry) + bcrypt |
+| Runtime | Python 3.12+ |
+| Framework | FastAPI |
+| Realtime sync | `ypy-websocket` with Yjs-compatible sync semantics |
+| Storage | SQLite |
+| Auth | JWT |
 
-### Setup
-
-```bash
-cd backend
-cp .env.example .env      # set JWT_SECRET to a strong random value
-npm install
-npm start                 # http://localhost:3001
-```
-
-`npm run dev` uses `--watch` for auto-reload during development.
-
-### Running tests
-
-```bash
-cd backend
-npm test
-```
-
-Tests use an in-memory SQLite database — no `.env` needed. The suite covers the full PoC flow: register → login → create/update/share document → version history → AI stub → delete.
-
-### API Contract
-
-All endpoints return JSON. Authenticated endpoints require `Authorization: Bearer <token>`.
-
-#### Auth
-
-| Method | Path | Body | Response |
-|--------|------|------|----------|
-| POST | `/api/auth/register` | `{ username, email, password }` | `{ user, token }` |
-| POST | `/api/auth/login` | `{ email, password }` | `{ user, token }` |
-| GET | `/api/auth/me` | — | `{ user }` |
-
-`user` shape: `{ id, username, email }`
-
-#### Documents
-
-| Method | Path | Body | Response |
-|--------|------|------|----------|
-| GET | `/api/documents` | — | `{ documents[] }` |
-| POST | `/api/documents` | `{ title?, content? }` | `{ document }` |
-| GET | `/api/documents/:id` | — | `{ document, collaborators[] }` |
-| PUT | `/api/documents/:id` | `{ title?, content? }` | `{ document }` |
-| DELETE | `/api/documents/:id` | — | `{ message }` |
-| POST | `/api/documents/:id/share` | `{ email, role }` | `{ permission }` |
-| DELETE | `/api/documents/:id/share/:userId` | — | `{ message }` |
-| GET | `/api/documents/:id/versions` | `?full=1` for content | `{ versions[] }` |
-
-`role` ∈ `"viewer" \| "editor"`. Only the owner can share or delete.
-Every `PUT` that changes `content` snapshots the previous content to `versions`.
-
-#### AI (stub)
-
-| Method | Path | Body | Response |
-|--------|------|------|----------|
-| POST | `/api/documents/:id/ai/suggest` | `{ prompt, context? }` | `{ suggestion }` |
-| GET | `/api/documents/:id/ai/history` | — | `{ history[] }` |
-
-LLM integration is deferred to a later milestone.
-
-#### Collaboration Session (stub)
-
-| Method | Path | Body | Response |
-|--------|------|------|----------|
-| POST | `/api/documents/:id/session` | — | `{ sessionToken, expiresIn }` |
-
-Returns a short-lived stub token for future Collab Server handoff. Real WebSocket session validation is deferred.
-
-### Data Model
-
-```
-users              documents             permissions
-─────              ─────────             ───────────
-id                 id                    id
-username           title                 document_id → documents
-email              content               user_id     → users
-password_hash      owner_id  → users     role  (viewer|editor)
-created_at         created_at            created_at
-                   updated_at
-
-versions                      ai_interactions
-────────                      ───────────────
-id                            id
-document_id → documents       document_id → documents
-content                       user_id     → users
-created_by  → users           prompt
-created_at                    response
-                              created_at
-```
-
-### Docs
-
-| File | Contents |
-|------|----------|
-| `docs/traceability.md` | User stories → Functional requirements → Backend components |
-| `docs/auth-design.md` | JWT auth flow, password storage, access-control model |
-| `docs/repo-structure.md` | Monorepo choice, directory layout, config, testing structure |
-| `docs/erd.mmd` | Mermaid ERD source for users/documents/permissions/versions/AI interactions |
-| `docs/erd.png` | Exported ERD image for the current backend data model |
-| `docs/c4-diagrams/` | Draw.io sources and exported C4 Level 1/2/3 diagrams |
-| `docs/adr/` | Architecture Decision Records covering sync strategy, AI context, monorepo layout, and version retention |
-| `docs/error-contract.md` | Confirmed PoC error response format and status mapping |
-
-### What is intentionally deferred
-
-- Real-time collaboration (WebSocket / CRDT) — planned for a later milestone
-- LLM API calls in `/ai/suggest`
-- Version restore endpoint and UI flow
-- Advanced share roles (commenter/admin policy model)
-- Export UI
-
-## Frontend
-
-### Stack
+### Frontend
 
 | Concern | Choice |
 |---------|--------|
 | Build tool | Vite |
 | UI | React 19 + TypeScript |
-| Routing | React Router |
+| Editor | Tiptap |
+| Collaboration client | Yjs + `y-websocket` |
 | Styling | Tailwind CSS 4 + custom CSS variables |
 
-### Setup
+## Project Structure
+
+```text
+ai1220-collab-editor/
+├── backend/
+│   ├── app/                  # FastAPI collaboration foundation
+│   ├── tests/                # backend collaboration tests
+│   └── pyproject.toml
+├── frontend/
+│   └── src/
+│       ├── features/ai/
+│       ├── features/documents/
+│       └── features/editor/  # collaborative editor adapter + session hooks
+├── docs/
+│   ├── adr/
+│   ├── c4-diagrams/
+│   ├── realtime-contract.md
+│   └── ...
+├── DEVIATIONS.md
+└── run.sh
+```
+
+## How To Run This Branch
+
+### Option 1: single command
+
+```bash
+./run.sh
+```
+
+This starts:
+
+- FastAPI backend on `http://localhost:3001`
+- Vite frontend on `http://localhost:5173`
+
+### Option 2: run services manually
+
+#### Backend
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env
+uvicorn app.main:app --reload --host 0.0.0.0 --port 3001
+```
+
+Key backend env vars:
+
+```bash
+PORT=3001
+JWT_SECRET=change-me-in-production
+DB_PATH=./data/editor.db
+YSTORE_PATH=./data/yupdates.db
+ACCESS_TOKEN_TTL_SECONDS=604800
+COLLAB_SESSION_TTL_SECONDS=1800
+WS_BASE_URL=ws://localhost:3001/ws/collab
+CORS_ORIGIN=http://localhost:5173
+```
+
+#### Frontend
 
 ```bash
 cd frontend
-cp .env.example .env.local
 npm install
-npm run dev               # http://localhost:5173
+cp .env.example .env.local
+npm run dev
 ```
 
-Set the frontend API base URL in `.env.local`:
+Set:
 
 ```bash
 VITE_API_BASE_URL=http://localhost:3001/api
 ```
 
-The backend must already be running so the frontend can restore JWT sessions and load documents.
+## Backend API Surface
 
-### Implemented frontend routes
+All authenticated REST endpoints use:
 
-| Route | Purpose |
-|-------|---------|
-| `/login` | Product-facing sign-in screen using `POST /api/auth/login` |
-| `/register` | Product-facing registration screen using `POST /api/auth/register` |
-| `/documents` | Authenticated workspace using list, create, and delete document flows |
-| `/documents/:id` | Editor workspace using load, save, share, revoke, version-history, beta AI, and collaboration-session readiness flows |
+`Authorization: Bearer <token>`
 
-### Current frontend scope
+### Auth
 
-- Register, login, and restore a saved JWT session
-- Search, sort, and browse owned and shared documents
-- Create and delete owned documents
-- Open a document in a polished plain-text editor workspace
-- Save title/content changes manually
-- Manage collaborator access for owners using existing share routes
-- Review saved version history using the existing versions route
-- Generate beta AI suggestions and review assistant history for the current document
-- Request collaboration-session readiness for any accessible document
-- Render explicit read-only UI for viewer access
-- Warn before leaving with unsaved changes
-- Show visible loading, auth, access, not-found, and server-error states
+| Method | Path | Response |
+|--------|------|----------|
+| POST | `/api/auth/register` | `{ user, token }` |
+| POST | `/api/auth/login` | `{ user, token }` |
+| GET | `/api/auth/me` | `{ user }` |
 
-### Frontend limitations in this milestone
+### Documents
 
-- No rich-text editor
-- No realtime collaboration UI
-- AI suggestions still use the current backend stub response
-- Collaboration readiness does not mean live sync is active yet
-- No persistent accept/reject AI workflow
-- No version restore flow
-- No autosave
+| Method | Path | Response |
+|--------|------|----------|
+| GET | `/api/documents` | `{ documents[] }` |
+| POST | `/api/documents` | `{ document }` |
+| GET | `/api/documents/:id` | `{ document, collaborators[] }` |
+| PUT | `/api/documents/:id` | `{ document }` |
+| DELETE | `/api/documents/:id` | `{ message }` |
+| GET | `/api/documents/:id/versions` | `{ versions[] }` |
+| POST | `/api/documents/:id/share` | `{ permission }` |
+| DELETE | `/api/documents/:id/share/:userId` | `{ message }` |
 
-## QA Evidence (1 Apr Milestone)
+`document.content` and version `content` now use structured rich-text JSON.
 
-Final QA checks completed on April 2, 2026:
+### AI
 
-- Backend integration tests: `23/23` passing (`npm --prefix backend test`)
-- Frontend production build: pass (`npm --prefix frontend run build`)
+These routes remain present for compatibility with the AI branch:
 
-This verifies the documented PoC path remains runnable end-to-end on current `main`.
+| Method | Path | Response |
+|--------|------|----------|
+| POST | `/api/documents/:id/ai/suggest` | `{ suggestion }` |
+| GET | `/api/documents/:id/ai/history` | `{ history[] }` |
+
+### Collaboration
+
+#### REST session handshake
+
+| Method | Path | Response |
+|--------|------|----------|
+| POST | `/api/documents/:id/session` | `{ session_token, ws_url, expires_in, role }` |
+
+#### Websocket
+
+| Path | Notes |
+|------|-------|
+| `/ws/collab/{document_id}?token=<session_token>` | document-scoped authenticated collaboration socket |
+
+## Frontend Scope On This Branch
+
+Implemented in the current collaboration frontend layer:
+
+- collaborative editor adapter mounted inside the existing editor page
+- websocket provider setup and teardown
+- role-aware editable vs read-only behavior
+- awareness-driven collaborator list
+- connection status reporting:
+  - `idle`
+  - `connecting`
+  - `connected`
+  - `reconnecting`
+  - `offline`
+  - `resynced`
+  - `error`
+- AI suggestion application through editor transactions
+- manual persistence of the current collaborative snapshot
+
+## Verification
+
+Verified on this branch:
+
+- frontend production build:
+  - `npm --prefix frontend run build`
+- backend foundation tests:
+  - `backend/.venv/bin/python -m pytest backend/tests/test_realtime_foundation.py`
+
+## Docs Index
+
+| File | Contents |
+|------|----------|
+| `docs/realtime-contract.md` | Collaboration contracts for parallel team delivery |
+| `DEVIATIONS.md` | Explicit implementation differences from the Assignment 1 design |
+| `docs/traceability.md` | Requirements traceability |
+| `docs/auth-design.md` | Auth design notes |
+| `docs/repo-structure.md` | Repo layout and structure decisions |
+| `docs/error-contract.md` | Error-response contract |
+| `docs/erd.mmd` | Mermaid ERD source |
+| `docs/erd.png` | Exported ERD image |
+| `docs/c4-diagrams/` | Draw.io sources and exported C4 Level 1/2/3 diagrams |
+| `docs/adr/` | Architecture Decision Records |

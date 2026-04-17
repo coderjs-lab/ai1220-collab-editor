@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+**/.venv/
 
 # Environment secrets — never commit these
 .env
@@ -18,3 +19,6 @@ data/
 .idea/
 *.swp
 .claude/
+__pycache__/
+**/__pycache__/
+*.pyc

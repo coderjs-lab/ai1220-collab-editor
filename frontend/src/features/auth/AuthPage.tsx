@@ -33,16 +33,24 @@ const initialFields: AuthFields = {
 function validate(fields: AuthFields, mode: AuthMode): AuthFieldErrors {
   const errors: AuthFieldErrors = {};
 
-  if (mode === 'register' && !fields.username.trim()) {
-    errors.username = 'Enter a username.';
+  if (mode === 'register') {
+    if (!fields.username.trim()) {
+      errors.username = 'Enter a username.';
+    } else if (fields.username.trim().length < 1) {
+      errors.username = 'Username must not be empty.';
+    }
   }
 
   if (!fields.email.trim()) {
     errors.email = 'Enter an email address.';
+  } else if (fields.email.trim().length < 3) {
+    errors.email = 'Email must be at least 3 characters.';
   }
 
   if (!fields.password.trim()) {
     errors.password = 'Enter a password.';
+  } else if (mode === 'register' && fields.password.length < 6) {
+    errors.password = 'Password must be at least 6 characters.';
   }
 
   return errors;

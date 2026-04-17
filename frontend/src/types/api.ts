@@ -1,3 +1,5 @@
+export type RichTextContent = Record<string, unknown>;
+
 export interface ApiUser {
   id: number;
   username: string;
@@ -7,7 +9,7 @@ export interface ApiUser {
 export interface ApiDocument {
   id: number;
   title: string;
-  content: string;
+  content: RichTextContent;
   owner_id: number;
   created_at: string;
   updated_at: string;
@@ -26,7 +28,8 @@ export interface ApiVersion {
   created_by: number;
   created_at: string;
   created_by_username: string;
-  content?: string;
+  content?: RichTextContent;
+  restored_from?: number | null;
 }
 
 export interface ApiAiHistoryItem {
@@ -68,13 +71,15 @@ export interface AiHistoryResponse {
 }
 
 export interface DocumentSessionResponse {
-  sessionToken: string;
-  expiresIn: number;
+  session_token: string;
+  ws_url: string;
+  expires_in: number;
+  role: 'owner' | 'editor' | 'viewer';
 }
 
 export interface UpdateDocumentRequest {
   title?: string;
-  content?: string;
+  content?: RichTextContent;
 }
 
 export interface AiSuggestRequest {
@@ -115,5 +120,5 @@ export interface LoginRequest {
 
 export interface CreateDocumentRequest {
   title?: string;
-  content?: string;
+  content?: RichTextContent;
 }
