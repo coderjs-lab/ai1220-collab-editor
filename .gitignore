@@ -12,6 +12,7 @@ __pycache__/
 # Runtime data
 data/
 **/data/
+backend/tests/.test-editor.db
 
 # macOS
 .DS_Store
