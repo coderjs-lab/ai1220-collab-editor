@@ -10,6 +10,7 @@ import {
 import { AuthProvider, useAuth } from './AuthProvider';
 import { EmptyState } from '../components/EmptyState';
 import { AuthPage } from '../features/auth/AuthPage';
+import { AcceptShareLinkPage } from '../features/documents/AcceptShareLinkPage';
 import { DocumentsPage } from '../features/documents/DocumentsPage';
 import { EditorPage } from '../features/editor/EditorPage';
 
@@ -128,6 +129,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <EditorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/share/:token"
+        element={
+          <ProtectedRoute>
+            <AcceptShareLinkPage />
           </ProtectedRoute>
         }
       />

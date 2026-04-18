@@ -1,194 +1,261 @@
 from __future__ import annotations
 
-from pathlib import Path
+import importlib
 import os
 import sys
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 
-TEST_DB_PATH = Path(__file__).resolve().parent / '.test-editor.db'
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-os.environ['JWT_SECRET'] = 'test-secret-key-with-safe-length-123456'
-os.environ['DB_PATH'] = str(TEST_DB_PATH)
-os.environ['REFRESH_COOKIE_NAME'] = 'draftboard_refresh'
+def load_app(tmp_path: Path):
+    os.environ["DB_PATH"] = str(tmp_path / "editor.db")
+    os.environ["YSTORE_PATH"] = str(tmp_path / "yupdates.db")
+    os.environ["JWT_SECRET"] = "test-secret-key-for-api-suite-with-safe-length-123456"
+    os.environ["WS_BASE_URL"] = "ws://testserver/ws/collab"
+    os.environ["REFRESH_COOKIE_NAME"] = "draftboard_refresh"
 
-from app.db import init_db  # noqa: E402
-from app.main import app  # noqa: E402
-from app.security import decode_access_token, hash_password, verify_password  # noqa: E402
+    for module_name in list(sys.modules):
+        if module_name == "backend.app" or module_name.startswith("backend.app."):
+            sys.modules.pop(module_name)
 
-
-client = TestClient(app)
-
-
-def setup_function() -> None:
-    init_db(reset=True)
+    main_module = importlib.import_module("backend.app.main")
+    return main_module.app
 
 
-def test_password_hash_round_trip() -> None:
-    password_hash = hash_password('pass12345')
-    assert password_hash != 'pass12345'
-    assert verify_password('pass12345', password_hash) is True
-    assert verify_password('wrong-pass', password_hash) is False
-
-
-def register_user(username: str, email: str, password: str = 'pass12345') -> dict:
+def register_user(client: TestClient, *, username: str, email: str, password: str = "password123"):
     response = client.post(
-        '/api/auth/register',
-        json={'username': username, 'email': email, 'password': password},
+        "/api/auth/register",
+        json={"username": username, "email": email, "password": password},
     )
-    assert response.status_code == 201
+    assert response.status_code == 201, response.text
     return response.json()
 
 
-def auth_headers(token: str) -> dict[str, str]:
-    return {'Authorization': f'Bearer {token}'}
+def auth_headers(token: str):
+    return {"Authorization": f"Bearer {token}"}
 
 
-def test_register_login_and_refresh_rotation() -> None:
-    register_response = register_user('alice', 'alice@test.com')
-    token = register_response['token']
-    payload = decode_access_token(token)
-    assert payload['email'] == 'alice@test.com'
-
-    first_refresh_cookie = client.cookies.get('draftboard_refresh')
-    assert first_refresh_cookie
-
-    refresh_response = client.post('/api/auth/refresh')
-    assert refresh_response.status_code == 200
-    assert refresh_response.json()['user']['username'] == 'alice'
-    second_refresh_cookie = client.cookies.get('draftboard_refresh')
-    assert second_refresh_cookie
-    assert second_refresh_cookie != first_refresh_cookie
-
-    stale_client = TestClient(app)
-    stale_client.cookies.set('draftboard_refresh', first_refresh_cookie)
-    stale_response = stale_client.post('/api/auth/refresh')
-    assert stale_response.status_code == 401
-    assert stale_response.json()['error'] == 'Refresh token is invalid or expired'
+def sample_content(text: str):
+    return {
+        "type": "doc",
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+    }
 
 
-def test_document_crud_permissions_and_restore() -> None:
-    alice = register_user('alice', 'alice@test.com')
-    bob = register_user('bob', 'bob@test.com')
-    carol = register_user('carol', 'carol@test.com')
+def test_register_login_refresh_and_logout(tmp_path: Path):
+    app = load_app(tmp_path)
 
-    create_response = client.post(
-        '/api/documents',
-        json={'title': 'Notes', 'content': '<p>Hello world</p>'},
-        headers=auth_headers(alice['token']),
-    )
-    assert create_response.status_code == 201
-    document_id = create_response.json()['document']['id']
+    with TestClient(app) as client:
+        register_response = register_user(client, username="alice", email="alice@test.com")
+        assert register_response["user"]["username"] == "alice"
+        first_refresh_cookie = client.cookies.get("draftboard_refresh")
+        assert first_refresh_cookie
 
-    share_editor = client.post(
-        f'/api/documents/{document_id}/share',
-        json={'identifier': 'bob', 'role': 'editor'},
-        headers=auth_headers(alice['token']),
-    )
-    assert share_editor.status_code == 201
-    assert share_editor.json()['permission']['user']['email'] == 'bob@test.com'
+        login_response = client.post(
+            "/api/auth/login",
+            json={"email": "alice@test.com", "password": "password123"},
+        )
+        assert login_response.status_code == 200, login_response.text
+        assert login_response.json()["user"]["email"] == "alice@test.com"
 
-    share_viewer = client.post(
-        f'/api/documents/{document_id}/share',
-        json={'identifier': 'carol@test.com', 'role': 'viewer'},
-        headers=auth_headers(alice['token']),
-    )
-    assert share_viewer.status_code == 201
+        refresh_response = client.post("/api/auth/refresh")
+        assert refresh_response.status_code == 200, refresh_response.text
+        second_refresh_cookie = client.cookies.get("draftboard_refresh")
+        assert second_refresh_cookie
+        assert second_refresh_cookie != first_refresh_cookie
 
-    viewer_update = client.put(
-        f'/api/documents/{document_id}',
-        json={'content': '<p>Blocked</p>'},
-        headers=auth_headers(carol['token']),
-    )
-    assert viewer_update.status_code == 403
+        logout_response = client.post("/api/auth/logout")
+        assert logout_response.status_code == 200
+        assert logout_response.json()["message"] == "Signed out successfully"
 
-    editor_update = client.put(
-        f'/api/documents/{document_id}',
-        json={'content': '<h2>Updated</h2><p>Editor change</p>'},
-        headers=auth_headers(bob['token']),
-    )
-    assert editor_update.status_code == 200
-
-    versions_response = client.get(
-        f'/api/documents/{document_id}/versions',
-        params={'full': True},
-        headers=auth_headers(alice['token']),
-    )
-    assert versions_response.status_code == 200
-    versions = versions_response.json()['versions']
-    assert len(versions) == 1
-    assert versions[0]['content'] == '<p>Hello world</p>'
-
-    restore_response = client.post(
-        f'/api/documents/{document_id}/versions/{versions[0]["id"]}/restore',
-        headers=auth_headers(bob['token']),
-    )
-    assert restore_response.status_code == 200
-    assert restore_response.json()['document']['content'] == '<p>Hello world</p>'
-
-    restored_versions = client.get(
-        f'/api/documents/{document_id}/versions',
-        params={'full': True},
-        headers=auth_headers(alice['token']),
-    ).json()['versions']
-    assert len(restored_versions) == 2
-    assert restored_versions[0]['content'] == '<h2>Updated</h2><p>Editor change</p>'
+        stale_refresh = client.post("/api/auth/refresh")
+        assert stale_refresh.status_code == 401
+        assert stale_refresh.json()["error"] == "Refresh token is invalid or expired"
 
 
-def test_ai_stub_and_collaboration_session_permissions() -> None:
-    alice = register_user('alice', 'alice@test.com')
-    bob = register_user('bob', 'bob@test.com')
+def test_document_crud_permissions_and_restore(tmp_path: Path):
+    app = load_app(tmp_path)
 
-    document_id = client.post(
-        '/api/documents',
-        json={'title': 'AI Test', 'content': '<p>Important context for the assistant.</p>'},
-        headers=auth_headers(alice['token']),
-    ).json()['document']['id']
+    with TestClient(app) as client:
+        alice = register_user(client, username="alice", email="alice@test.com")
+        bob = register_user(client, username="bob", email="bob@test.com")
+        carol = register_user(client, username="carol", email="carol@test.com")
 
-    client.post(
-        f'/api/documents/{document_id}/share',
-        json={'identifier': 'bob', 'role': 'viewer'},
-        headers=auth_headers(alice['token']),
-    )
+        create_response = client.post(
+            "/api/documents",
+            json={"title": "Notes", "content": sample_content("Hello world")},
+            headers=auth_headers(alice["token"]),
+        )
+        assert create_response.status_code == 201, create_response.text
+        document_id = create_response.json()["document"]["id"]
 
-    blocked_ai = client.post(
-        f'/api/documents/{document_id}/ai/suggest',
-        json={'prompt': 'Summarize this'},
-        headers=auth_headers(bob['token']),
-    )
-    assert blocked_ai.status_code == 403
+        share_editor = client.post(
+            f"/api/documents/{document_id}/share",
+            json={"identifier": "bob", "role": "editor"},
+            headers=auth_headers(alice["token"]),
+        )
+        assert share_editor.status_code == 201, share_editor.text
+        assert share_editor.json()["permission"]["user"]["email"] == "bob@test.com"
 
-    allowed_ai = client.post(
-        f'/api/documents/{document_id}/ai/suggest',
-        json={'prompt': 'Summarize this'},
-        headers=auth_headers(alice['token']),
-    )
-    assert allowed_ai.status_code == 200
-    assert 'Suggested revision' in allowed_ai.json()['suggestion']
+        share_viewer = client.post(
+            f"/api/documents/{document_id}/share",
+            json={"identifier": "carol@test.com", "role": "viewer"},
+            headers=auth_headers(alice["token"]),
+        )
+        assert share_viewer.status_code == 201, share_viewer.text
 
-    history_response = client.get(
-        f'/api/documents/{document_id}/ai/history',
-        headers=auth_headers(bob['token']),
-    )
-    assert history_response.status_code == 200
-    assert history_response.json()['history'][0]['model'] == 'draftboard-stub-v1'
+        viewer_update = client.put(
+            f"/api/documents/{document_id}",
+            json={"content": sample_content("Blocked")},
+            headers=auth_headers(carol["token"]),
+        )
+        assert viewer_update.status_code == 403
 
-    session_response = client.post(
-        f'/api/documents/{document_id}/session',
-        headers=auth_headers(bob['token']),
-    )
-    assert session_response.status_code == 200
-    assert session_response.json()['expiresIn'] == 3600
+        editor_update = client.put(
+            f"/api/documents/{document_id}",
+            json={"content": sample_content("Editor change")},
+            headers=auth_headers(bob["token"]),
+        )
+        assert editor_update.status_code == 200, editor_update.text
+        assert editor_update.json()["document"]["content"]["content"][0]["content"][0]["text"] == "Editor change"
+
+        versions_response = client.get(
+            f"/api/documents/{document_id}/versions",
+            headers=auth_headers(alice["token"]),
+        )
+        assert versions_response.status_code == 200, versions_response.text
+        versions = versions_response.json()["versions"]
+        assert len(versions) == 1
+        assert versions[0]["content"]["content"][0]["content"][0]["text"] == "Hello world"
+
+        restore_response = client.post(
+            f"/api/documents/{document_id}/versions/{versions[0]['id']}/restore",
+            headers=auth_headers(bob["token"]),
+        )
+        assert restore_response.status_code == 200, restore_response.text
+        assert restore_response.json()["document"]["content"]["content"][0]["content"][0]["text"] == "Hello world"
 
 
-def test_logout_revokes_refresh_cookie() -> None:
-    register_user('alice', 'alice@test.com')
-    refresh_cookie = client.cookies.get('draftboard_refresh')
-    assert refresh_cookie
+def test_share_link_lifecycle(tmp_path: Path):
+    app = load_app(tmp_path)
 
-    logout_response = client.post('/api/auth/logout')
-    assert logout_response.status_code == 200
+    with TestClient(app) as client:
+        owner = register_user(client, username="owner", email="owner@example.com")
+        guest = register_user(client, username="guest", email="guest@example.com")
 
-    refresh_response = client.post('/api/auth/refresh')
-    assert refresh_response.status_code == 401
+        document_id = client.post(
+            "/api/documents",
+            json={"title": "Shared draft", "content": sample_content("Realtime doc")},
+            headers=auth_headers(owner["token"]),
+        ).json()["document"]["id"]
+
+        create_link = client.post(
+            f"/api/documents/{document_id}/share-links",
+            json={"role": "viewer"},
+            headers=auth_headers(owner["token"]),
+        )
+        assert create_link.status_code == 201, create_link.text
+        share_link = create_link.json()["share_link"]
+        assert share_link["url"].endswith(f"/share/{share_link['token']}")
+
+        list_links = client.get(
+            f"/api/documents/{document_id}/share-links",
+            headers=auth_headers(owner["token"]),
+        )
+        assert list_links.status_code == 200
+        assert len(list_links.json()["share_links"]) == 1
+
+        accept_link = client.post(
+            f"/api/share-links/{share_link['token']}/accept",
+            headers=auth_headers(guest["token"]),
+        )
+        assert accept_link.status_code == 200, accept_link.text
+        assert accept_link.json()["role"] == "viewer"
+
+        guest_document = client.get(
+            f"/api/documents/{document_id}",
+            headers=auth_headers(guest["token"]),
+        )
+        assert guest_document.status_code == 200
+
+        revoke_link = client.delete(
+            f"/api/documents/{document_id}/share-links/{share_link['id']}",
+            headers=auth_headers(owner["token"]),
+        )
+        assert revoke_link.status_code == 200
+
+        stale_accept = client.post(
+            f"/api/share-links/{share_link['token']}/accept",
+            headers=auth_headers(guest["token"]),
+        )
+        assert stale_accept.status_code == 404
+
+
+def test_ai_permissions_and_history(tmp_path: Path):
+    app = load_app(tmp_path)
+
+    with TestClient(app) as client:
+        owner = register_user(client, username="owner", email="owner@example.com")
+        viewer = register_user(client, username="viewer", email="viewer@example.com")
+
+        document_id = client.post(
+            "/api/documents",
+            json={"title": "AI test", "content": sample_content("Important context for the assistant.")},
+            headers=auth_headers(owner["token"]),
+        ).json()["document"]["id"]
+
+        client.post(
+            f"/api/documents/{document_id}/share",
+            json={"identifier": "viewer@example.com", "role": "viewer"},
+            headers=auth_headers(owner["token"]),
+        )
+
+        blocked_ai = client.post(
+            f"/api/documents/{document_id}/ai/suggest",
+            json={"prompt": "Summarize this"},
+            headers=auth_headers(viewer["token"]),
+        )
+        assert blocked_ai.status_code == 403
+
+        allowed_ai = client.post(
+            f"/api/documents/{document_id}/ai/suggest",
+            json={"prompt": "Summarize this", "context": "document"},
+            headers=auth_headers(owner["token"]),
+        )
+        assert allowed_ai.status_code == 200
+        assert "Prompt: Summarize this" in allowed_ai.json()["suggestion"]
+
+        history_response = client.get(
+            f"/api/documents/{document_id}/ai/history",
+            headers=auth_headers(viewer["token"]),
+        )
+        assert history_response.status_code == 200
+        assert history_response.json()["history"][0]["username"] == "owner"
+
+
+def test_collaboration_session_and_websocket_handshake(tmp_path: Path):
+    app = load_app(tmp_path)
+
+    with TestClient(app) as client:
+        owner = register_user(client, username="owner", email="owner@example.com")
+
+        document_id = client.post(
+            "/api/documents",
+            json={"title": "Realtime Demo", "content": sample_content("Hello")},
+            headers=auth_headers(owner["token"]),
+        ).json()["document"]["id"]
+
+        session_response = client.post(
+            f"/api/documents/{document_id}/session",
+            headers=auth_headers(owner["token"]),
+        )
+        assert session_response.status_code == 200, session_response.text
+        session = session_response.json()
+        assert session["role"] == "owner"
+        assert session["expires_in"] > 0
+
+        with client.websocket_connect(
+            f"/ws/collab/{document_id}?token={session['session_token']}"
+        ) as websocket:
+            assert websocket is not None

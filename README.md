@@ -13,20 +13,22 @@ The **AI writing assistant branch is still pending final integration**, so AI be
 - React + TypeScript frontend under `frontend/`
 - JWT access tokens with refresh-cookie session recovery
 - document CRUD, owner-managed sharing, revoke access, and version history
+- autosave with immediate manual save override
 - restore of previous versions
 - Tiptap-based rich-text document content
 - authenticated realtime collaboration over websocket at `/ws/collab/{document_id}`
 - Yjs / `ypy-websocket` shared sync
-- collaborator presence and remote cursor / selection rendering
+- IndexedDB-backed local collaborative state for offline editing and sync-on-reconnect
+- collaborator presence, typing/activity state, and remote cursor / selection rendering
+- share-by-link creation, acceptance, and revocation
+- browser E2E coverage for the core + realtime flow with Playwright
 - explicit implementation notes in [DEVIATIONS.md](DEVIATIONS.md)
 
 ## What Is Not Final Yet
 
 - final AI assistant implementation from the teammate-owned AI branch
-- share-by-link permission flow
-- durable offline-first editing across refresh / browser restart
 - Redis-backed multi-instance collaboration fan-out
-- browser E2E coverage with Playwright / Cypress
+- partial acceptance of AI suggestion fragments
 
 ## How To Run
 
@@ -97,6 +99,10 @@ All authenticated REST endpoints use:
 | POST | `/api/documents/:id/versions/:versionId/restore` | `{ document }` |
 | POST | `/api/documents/:id/share` | `{ permission }` |
 | DELETE | `/api/documents/:id/share/:userId` | `{ message }` |
+| GET | `/api/documents/:id/share-links` | `{ share_links[] }` |
+| POST | `/api/documents/:id/share-links` | `{ share_link }` |
+| DELETE | `/api/documents/:id/share-links/:linkId` | `{ message }` |
+| POST | `/api/share-links/:token/accept` | `{ document, role }` |
 
 `document.content` and version `content` use structured rich-text JSON.
 
@@ -127,8 +133,12 @@ Recommended checks on this branch:
 
 ```bash
 npm --prefix frontend run build
-backend/.venv/bin/python -m pytest backend/tests/test_realtime_foundation.py
+npm --prefix frontend test
+backend/.venv/bin/python -m pytest
+npm --prefix frontend run test:e2e
 ```
+
+The Playwright E2E suite is configured to run against local FastAPI + Vite servers and uses the system Chrome channel.
 
 ## Key Docs
 

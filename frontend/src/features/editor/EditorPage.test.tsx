@@ -1,8 +1,17 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { useAuthMock, documentsApi } = vi.hoisted(() => ({
+const {
+  useAuthMock,
+  documentsApi,
+  shareLinksApi,
+  persistSnapshotMock,
+  applyServerDocumentMock,
+  replaceWithSuggestionMock,
+  appendSuggestionMock,
+  clearTransientSaveStateMock,
+} = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   documentsApi: {
     get: vi.fn(),
@@ -13,6 +22,17 @@ const { useAuthMock, documentsApi } = vi.hoisted(() => ({
     restoreVersion: vi.fn(),
     remove: vi.fn(),
   },
+  shareLinksApi: {
+    list: vi.fn(),
+    create: vi.fn(),
+    revoke: vi.fn(),
+    accept: vi.fn(),
+  },
+  persistSnapshotMock: vi.fn(),
+  applyServerDocumentMock: vi.fn(),
+  replaceWithSuggestionMock: vi.fn(),
+  appendSuggestionMock: vi.fn(),
+  clearTransientSaveStateMock: vi.fn(),
 }));
 
 vi.mock('../../app/AuthProvider', () => ({
@@ -32,6 +52,7 @@ vi.mock('../../services/api', () => ({
   },
   api: {
     documents: documentsApi,
+    shareLinks: shareLinksApi,
   },
 }));
 
@@ -61,49 +82,59 @@ vi.mock('../ai/AIAssistantPanel', () => ({
 
 vi.mock('./useCollaborationSession', () => ({
   useCollaborationSession: () => ({
-    status: 'comingSoon',
-    message: 'Collaboration not active yet.',
-    expiresIn: 3600,
+    status: 'ready',
+    message: 'Collaboration connected.',
+    session: {
+      session_token: 'collab-token',
+      ws_url: 'ws://localhost:3001/ws/collab',
+      expires_in: 1800,
+      role: 'owner',
+    },
     retry: vi.fn(),
   }),
 }));
 
-vi.mock('./CollaborationReadinessPanel', () => ({
-  CollaborationReadinessPanel: () => <div>Collaboration mock</div>,
+vi.mock('./useCollaborativeEditor', () => ({
+  useCollaborativeEditor: () => ({
+    editor: { isActive: vi.fn(() => false), chain: vi.fn(() => ({ focus: () => ({ setParagraph: () => ({ run: vi.fn() }), toggleHeading: () => ({ run: vi.fn() }), toggleBold: () => ({ run: vi.fn() }), toggleItalic: () => ({ run: vi.fn() }), toggleBulletList: () => ({ run: vi.fn() }), toggleOrderedList: () => ({ run: vi.fn() }), toggleCodeBlock: () => ({ run: vi.fn() }) }) })) },
+    connectionState: 'connected',
+    connectionMessage: 'Live collaboration is active.',
+    presenceUsers: [
+      {
+        clientId: 1,
+        userId: 1,
+        name: 'alice',
+        color: '#115e59',
+        role: 'owner',
+        activity: 'typing',
+        lastActiveAt: new Date().toISOString(),
+        active: true,
+        connections: 1,
+      },
+    ],
+    saveState: 'queued',
+    saveError: null,
+    saveMessage: 'Working offline. Changes are stored locally and will sync when the connection returns.',
+    isDirty: true,
+    plainText: 'Draft text',
+    persistSnapshot: persistSnapshotMock,
+    applyServerDocument: applyServerDocumentMock,
+    replaceWithSuggestion: replaceWithSuggestionMock,
+    appendSuggestion: appendSuggestionMock,
+    clearTransientSaveState: clearTransientSaveStateMock,
+  }),
 }));
 
 vi.mock('./useUnsavedChangesPrompt', () => ({
   useUnsavedChangesPrompt: vi.fn(),
 }));
 
-vi.mock('./RichTextEditor', () => ({
-  RichTextEditor: ({
-    value,
-    editable,
-    onChange,
-    onBlur,
+vi.mock('./CollaborativeEditorAdapter', () => ({
+  CollaborativeEditorAdapter: ({
+    readOnly,
   }: {
-    value: string;
-    editable: boolean;
-    onChange: (value: string) => void;
-    onBlur?: () => void;
-  }) => (
-    <div>
-      <div
-        data-testid="rich-text-editor"
-        contentEditable={editable}
-        suppressContentEditableWarning
-      >
-        {value}
-      </div>
-      <button onClick={() => onChange('<p>Changed draft</p>')} type="button">
-        Change draft
-      </button>
-      <button onClick={() => onBlur?.()} type="button">
-        Blur editor
-      </button>
-    </div>
-  ),
+    readOnly: boolean;
+  }) => <div data-testid="collaborative-editor">{readOnly ? 'read-only' : 'editable'}</div>,
 }));
 
 import { EditorPage } from './EditorPage';
@@ -125,30 +156,30 @@ describe('EditorPage', () => {
 
     useAuthMock.mockReturnValue({
       user: { id: 1, username: 'alice', email: 'alice@test.com' },
-      signOut: vi.fn(),
     });
 
     documentsApi.get.mockResolvedValue({
       document: {
         id: 1,
         title: 'Project Plan',
-        content: '<p>Initial draft</p>',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
         owner_id: 1,
         created_at: '2026-04-17T10:00:00Z',
         updated_at: '2026-04-17T10:00:00Z',
       },
       collaborators: [],
     });
-    documentsApi.versions.mockResolvedValue({ versions: [] });
-    documentsApi.update.mockResolvedValue({
-      document: {
-        id: 1,
-        title: 'Project Plan',
-        content: '<p>Changed draft</p>',
-        owner_id: 1,
-        created_at: '2026-04-17T10:00:00Z',
-        updated_at: '2026-04-17T10:01:00Z',
-      },
+    documentsApi.versions.mockResolvedValue({
+      versions: [
+        {
+          id: 9,
+          document_id: 1,
+          created_by: 1,
+          created_at: '2026-04-17T09:00:00Z',
+          created_by_username: 'alice',
+          content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Old snapshot' }] }] },
+        },
+      ],
     });
     documentsApi.share.mockResolvedValue({
       permission: {
@@ -160,28 +191,56 @@ describe('EditorPage', () => {
       document: {
         id: 1,
         title: 'Project Plan',
-        content: '<p>Old snapshot</p>',
+        content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Old snapshot' }] }] },
         owner_id: 1,
         created_at: '2026-04-17T10:00:00Z',
         updated_at: '2026-04-17T10:02:00Z',
       },
     });
+    shareLinksApi.list.mockResolvedValue({
+      share_links: [
+        {
+          id: 5,
+          role: 'viewer',
+          token: 'viewer-token',
+          url: 'http://localhost:5173/share/viewer-token',
+          created_at: '2026-04-17T10:00:00Z',
+          revoked_at: null,
+        },
+      ],
+    });
+    shareLinksApi.create.mockResolvedValue({
+      share_link: {
+        id: 6,
+        role: 'editor',
+        token: 'editor-token',
+        url: 'http://localhost:5173/share/editor-token',
+        created_at: '2026-04-17T10:05:00Z',
+        revoked_at: null,
+      },
+    });
+    shareLinksApi.revoke.mockResolvedValue({ message: 'Share link revoked' });
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  it('renders autosave and collaboration status for owners', async () => {
+    renderEditorPage();
+
+    await screen.findByDisplayValue('Project Plan');
+    expect(screen.getByText('Autosave is on')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Collab'));
+    expect(screen.getByText('Typing')).toBeInTheDocument();
+    expect(screen.getByTestId('collaborative-editor')).toHaveTextContent('editable');
   });
 
   it('renders the editor in read-only mode for viewers', async () => {
     useAuthMock.mockReturnValue({
       user: { id: 2, username: 'bob', email: 'bob@test.com' },
-      signOut: vi.fn(),
     });
     documentsApi.get.mockResolvedValue({
       document: {
         id: 1,
         title: 'Project Plan',
-        content: '<p>Initial draft</p>',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
         owner_id: 1,
         created_at: '2026-04-17T10:00:00Z',
         updated_at: '2026-04-17T10:00:00Z',
@@ -191,27 +250,8 @@ describe('EditorPage', () => {
 
     renderEditorPage();
 
-    await screen.findByText('This document is open in view-only mode.');
-    expect(screen.getByTestId('rich-text-editor')).toHaveAttribute('contenteditable', 'false');
-  });
-
-  it('autosaves rich-text edits after the debounce window', async () => {
-    renderEditorPage();
-
-    await screen.findByDisplayValue('Project Plan');
-    vi.useFakeTimers();
-
-    fireEvent.click(screen.getByText('Change draft'));
-
-    await act(async () => {
-      vi.advanceTimersByTime(1500);
-      await Promise.resolve();
-    });
-
-    expect(documentsApi.update).toHaveBeenCalledWith('1', {
-      title: 'Project Plan',
-      content: '<p>Changed draft</p>',
-    });
+    await screen.findByText('This document is read-only for your current access level.');
+    expect(screen.getByTestId('collaborative-editor')).toHaveTextContent('read-only');
   });
 
   it('shares by email or username from the access panel', async () => {
@@ -232,20 +272,29 @@ describe('EditorPage', () => {
     );
   });
 
-  it('restores the selected version from history', async () => {
-    documentsApi.versions.mockResolvedValue({
-      versions: [
-        {
-          id: 9,
-          document_id: 1,
-          created_by: 1,
-          created_at: '2026-04-17T09:00:00Z',
-          created_by_username: 'alice',
-          content: '<p>Old snapshot</p>',
-        },
-      ],
+  it('creates and revokes share links from the access panel', async () => {
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
 
+    renderEditorPage();
+
+    await screen.findByDisplayValue('Project Plan');
+    fireEvent.change(screen.getByLabelText('Link role'), {
+      target: { value: 'editor' },
+    });
+    fireEvent.click(screen.getByText('Create link'));
+
+    await waitFor(() =>
+      expect(shareLinksApi.create).toHaveBeenCalledWith('1', { role: 'editor' }),
+    );
+
+    fireEvent.click(screen.getAllByText('Revoke')[0]);
+
+    await waitFor(() => expect(shareLinksApi.revoke).toHaveBeenCalledWith('1', 6));
+  });
+
+  it('restores the selected version from history', async () => {
     renderEditorPage();
 
     await screen.findByDisplayValue('Project Plan');
@@ -254,5 +303,22 @@ describe('EditorPage', () => {
     fireEvent.click(screen.getByText('Restore version'));
 
     await waitFor(() => expect(documentsApi.restoreVersion).toHaveBeenCalledWith('1', 9));
+    await waitFor(() =>
+      expect(applyServerDocumentMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          title: 'Project Plan',
+        }),
+      ),
+    );
+  });
+
+  it('allows an immediate save from the toolbar action', async () => {
+    renderEditorPage();
+
+    await screen.findByDisplayValue('Project Plan');
+    fireEvent.click(screen.getByText('Save now'));
+
+    await waitFor(() => expect(persistSnapshotMock).toHaveBeenCalled());
   });
 });

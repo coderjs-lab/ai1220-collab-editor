@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 def load_app(tmp_path: Path):
     os.environ["DB_PATH"] = str(tmp_path / "editor.db")
     os.environ["YSTORE_PATH"] = str(tmp_path / "yupdates.db")
-    os.environ["JWT_SECRET"] = "test-secret-key-for-realtime-suite"
+    os.environ["JWT_SECRET"] = "test-secret-key-for-realtime-suite-with-safe-length-123456"
     os.environ["WS_BASE_URL"] = "ws://testserver/ws/collab"
 
     for module_name in list(sys.modules):

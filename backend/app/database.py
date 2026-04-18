@@ -62,6 +62,16 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   revoked_at DATETIME
 );
+
+CREATE TABLE IF NOT EXISTS share_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL CHECK(role IN ('viewer', 'editor')),
+  created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  revoked_at DATETIME
+);
 """
 
 

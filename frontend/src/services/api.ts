@@ -1,19 +1,23 @@
 import {
+  type AcceptShareLinkResponse,
   type AiHistoryResponse,
   type AiSuggestRequest,
   type AiSuggestResponse,
   type AuthResponse,
   type CreateDocumentRequest,
+  type CreateShareLinkRequest,
   type DeleteDocumentResponse,
   type DocumentDetailResponse,
   type DocumentListResponse,
   type DocumentResponse,
   type DocumentSessionResponse,
+  type DocumentShareLinksResponse,
   type DocumentVersionsResponse,
   type LoginRequest,
   type LogoutResponse,
   type MeResponse,
   type RegisterRequest,
+  type ShareLinkResponse,
   type ShareDocumentRequest,
   type ShareDocumentResponse,
   type UpdateDocumentRequest,
@@ -24,7 +28,7 @@ import {
   setStoredToken,
 } from './storage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api';
 
 export class ApiError extends Error {
   status: number;
@@ -258,6 +262,27 @@ export const api = {
     },
     restoreVersion(id: string, versionId: number) {
       return request<DocumentResponse>(`/documents/${id}/versions/${versionId}/restore`, {
+        method: 'POST',
+      });
+    },
+  },
+  shareLinks: {
+    list(documentId: string) {
+      return request<DocumentShareLinksResponse>(`/documents/${documentId}/share-links`);
+    },
+    create(documentId: string, body: CreateShareLinkRequest) {
+      return request<ShareLinkResponse>(`/documents/${documentId}/share-links`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    revoke(documentId: string, linkId: number) {
+      return request<DeleteDocumentResponse>(`/documents/${documentId}/share-links/${linkId}`, {
+        method: 'DELETE',
+      });
+    },
+    accept(token: string) {
+      return request<AcceptShareLinkResponse>(`/share-links/${token}/accept`, {
         method: 'POST',
       });
     },

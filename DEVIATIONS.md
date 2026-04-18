@@ -44,17 +44,17 @@ The point is traceability, not pretending the design never changed. Each deviati
 - **Why:** The core-app implementation introduced stronger session recovery, and that contract was already present in the integrated frontend auth layer.
 - **Outcome:** Improvement. It gives a better user session lifecycle, especially when long-running editor sessions hit token expiry.
 
-## 7. Collaboration persistence is hybrid: live Yjs state plus manual REST snapshot saves
+## 7. Collaboration persistence is hybrid: live Yjs state plus REST-backed autosave snapshots
 
-- **Changed:** Live editing is synchronized through Yjs/websockets, but durable document snapshots and version history are still persisted through the REST document update / restore path instead of a fully separate collaborative checkpointing service.
-- **Why:** This preserved compatibility with the existing document/version model and avoided duplicating the core-app ownership slice around version lifecycle.
-- **Outcome:** Compromise. The branch is usable, but it is not yet the ideal fully integrated persistence architecture for a production collaborative editor.
+- **Changed:** Live editing is synchronized through Yjs/websockets, while durable document snapshots and version history are persisted through autosaved REST document updates plus explicit restore operations.
+- **Why:** This preserved compatibility with the core-app document/version model without introducing a second persistence subsystem just for collaborative checkpoints.
+- **Outcome:** Mixed. It is an improvement over manual-save-only behavior and satisfies the assignment workflow, but it is still a hybrid persistence model rather than a fully CRDT-native storage stack.
 
-## 8. Version history now supports restore, but autosave is not finalized around collaboration
+## 8. Version history now coexists with autosave instead of manual-save-only editing
 
-- **Changed:** Core-app version restore is integrated, but the final autosave policy around collaborative sessions is not yet fully settled in this branch.
-- **Why:** Core-app and realtime evolved separately. Restore was important to preserve; collaborative autosave still needs a cleaner final reconciliation.
-- **Outcome:** Mixed. Restore is an improvement; autosave behavior remains a compromise until the final editor flow is locked.
+- **Changed:** The integrated editor now autosaves after a short debounce while still allowing an immediate manual save action for explicit checkpoints. Earlier branch states were manual-save-only.
+- **Why:** Assignment 2 requires autosave, and the collaborative editor needed a save policy that works with realtime typing instead of relying on users to remember a save button.
+- **Outcome:** Improvement. It gives a more credible editor workflow while preserving the existing restore-based version history.
 
 ## 9. Direct SQLite repository helpers are used instead of a fuller ORM-backed data layer
 
@@ -62,17 +62,17 @@ The point is traceability, not pretending the design never changed. Each deviati
 - **Why:** This kept both the core-app and realtime integration small enough to finish within assignment scope.
 - **Outcome:** Compromise. It is fast to understand and works well for the proof of concept, but it is less extensible than a more formal data layer.
 
-## 10. Durable offline-first editing across refresh / restart is still not implemented
+## 10. Offline editing now uses IndexedDB-backed Yjs persistence
 
-- **Changed:** The branch reconnects gracefully during transient socket loss while the page remains open, but unsynced collaborative state is not persisted locally across browser refresh, tab close, or machine restart.
-- **Why:** The integration prioritized working realtime collaboration, presence, and cursor sync first. Durable offline-first support would require a separate local persistence layer, such as IndexedDB-backed Yjs storage.
-- **Outcome:** Compromise. Temporary disconnect recovery works; full offline-first behavior does not.
+- **Changed:** The earlier integrated branch only survived transient socket drops while the tab stayed open. The current implementation persists collaborative Yjs state locally with IndexedDB so edits survive reload and sync back after reconnection.
+- **Why:** Graceful degradation with sync-on-reconnect is part of the Assignment 2 collaboration bonus path, and a purely in-memory reconnect story was not enough.
+- **Outcome:** Improvement. The app now has a credible offline-first behavior for a single-device proof of concept, though it is still not a multi-device sync queue.
 
-## 11. Sharing remains email-based rather than share-by-link
+## 11. Sharing now supports both direct invites and share-by-link
 
-- **Changed:** Sharing is still managed by owner-invited users with `viewer` / `editor` roles. There is no link generation and no link revocation model.
-- **Why:** The integration focused on document permissions and collaboration behavior before broadening the access-control model.
-- **Outcome:** Compromise. The feature is functional, but it does not satisfy the stronger bonus-tier sharing behavior.
+- **Changed:** The integrated branch keeps owner-managed direct sharing by username/email and now also supports share-link generation, acceptance, and revocation with `viewer` / `editor` roles.
+- **Why:** The assignment bonus path explicitly rewards link-based sharing with permission control and revocation.
+- **Outcome:** Improvement. This broadens the access model without replacing the simpler direct-invite flow.
 
 ## 12. AI suggestions still lack partial acceptance and the final AI branch
 
@@ -80,8 +80,8 @@ The point is traceability, not pretending the design never changed. Each deviati
 - **Why:** The AI branch is still pending final push / merge.
 - **Outcome:** Compromise. The collaboration/editor contract is preserved, but AI is not final on this branch.
 
-## 13. Browser end-to-end coverage is still absent
+## 13. Browser end-to-end coverage now uses Playwright rather than remaining purely unit/integration level
 
-- **Changed:** The branch has backend collaboration tests and frontend unit/integration coverage, but no Playwright/Cypress end-to-end suite.
-- **Why:** The integration effort prioritized making the combined app run and sync correctly before adding full browser automation on top of a moving multi-branch codebase.
-- **Outcome:** Compromise. Test coverage is meaningful, but not yet complete for the full assignment bonus path.
+- **Changed:** The branch now includes a Playwright E2E flow that exercises registration, document creation, share-by-link acceptance, realtime collaboration, and autosave persistence.
+- **Why:** The bonus path explicitly rewards end-to-end coverage across the real browser workflow instead of relying only on backend and component tests.
+- **Outcome:** Improvement. Verification is now materially stronger, though the current suite is intentionally focused on the highest-value core/realtime path rather than exhaustive UI permutations.

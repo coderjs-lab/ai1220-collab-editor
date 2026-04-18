@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timedelta, timezone
+import secrets
 from typing import Any
 
 from .content import coerce_content, serialize_content
@@ -372,3 +373,94 @@ def revoke_refresh_token_by_hash(connection: sqlite3.Connection, token_hash: str
         """,
         (token_hash,),
     )
+
+
+def share_link_payload(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "role": row["role"],
+        "token": row["token"],
+        "created_at": row["created_at"],
+        "revoked_at": row["revoked_at"],
+    }
+
+
+def create_share_link(
+    connection: sqlite3.Connection,
+    document_id: int,
+    role: str,
+    created_by: int,
+) -> dict[str, Any]:
+    token = secrets.token_urlsafe(24)
+    cursor = connection.execute(
+        """
+        INSERT INTO share_links (document_id, token, role, created_by)
+        VALUES (?, ?, ?, ?)
+        """,
+        (document_id, token, role, created_by),
+    )
+    row = connection.execute("SELECT * FROM share_links WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return share_link_payload(row)
+
+
+def list_share_links(connection: sqlite3.Connection, document_id: int) -> list[dict[str, Any]]:
+    rows = connection.execute(
+        """
+        SELECT *
+        FROM share_links
+        WHERE document_id = ? AND revoked_at IS NULL
+        ORDER BY datetime(created_at) DESC
+        """,
+        (document_id,),
+    ).fetchall()
+    return [share_link_payload(row) for row in rows]
+
+
+def find_active_share_link(connection: sqlite3.Connection, token: str) -> sqlite3.Row | None:
+    return connection.execute(
+        """
+        SELECT *
+        FROM share_links
+        WHERE token = ? AND revoked_at IS NULL
+        """,
+        (token,),
+    ).fetchone()
+
+
+def revoke_share_link(connection: sqlite3.Connection, document_id: int, link_id: int) -> None:
+    connection.execute(
+        """
+        UPDATE share_links
+        SET revoked_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND document_id = ? AND revoked_at IS NULL
+        """,
+        (link_id, document_id),
+    )
+
+
+def accept_share_link(
+    connection: sqlite3.Connection,
+    token: str,
+    user_id: int,
+) -> tuple[dict[str, Any], str]:
+    share_link = find_active_share_link(connection, token)
+    if share_link is None:
+        raise LookupError("Share link not found")
+
+    document = find_document(connection, int(share_link["document_id"]))
+    if document is None:
+        raise LookupError("Document not found")
+
+    if int(document["owner_id"]) == user_id:
+        return public_document(document), "owner"
+
+    permission = find_permission(connection, int(document["id"]), user_id)
+    role = share_link["role"]
+    if permission is None or permission["role"] != role:
+        upsert_permission(connection, int(document["id"]), user_id, role)
+
+    updated_document, resolved_role = resolve_document_access(connection, int(document["id"]), user_id)
+    if updated_document is None or resolved_role is None:
+        raise LookupError("Could not resolve shared access")
+
+    return public_document(updated_document), resolved_role

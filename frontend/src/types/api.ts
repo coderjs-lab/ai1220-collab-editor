@@ -22,6 +22,15 @@ export interface ApiCollaborator {
   role: 'viewer' | 'editor';
 }
 
+export interface ApiShareLink {
+  id: number;
+  role: 'viewer' | 'editor';
+  token: string;
+  url: string;
+  created_at: string;
+  revoked_at?: string | null;
+}
+
 export interface ApiVersion {
   id: number;
   document_id: number;
@@ -68,6 +77,10 @@ export interface DocumentVersionsResponse {
   versions: ApiVersion[];
 }
 
+export interface DocumentShareLinksResponse {
+  share_links: ApiShareLink[];
+}
+
 export interface AiHistoryResponse {
   history: ApiAiHistoryItem[];
 }
@@ -76,6 +89,15 @@ export interface DocumentSessionResponse {
   session_token: string;
   ws_url: string;
   expires_in: number;
+  role: 'owner' | 'editor' | 'viewer';
+}
+
+export interface ShareLinkResponse {
+  share_link: ApiShareLink;
+}
+
+export interface AcceptShareLinkResponse {
+  document: ApiDocument;
   role: 'owner' | 'editor' | 'viewer';
 }
 
@@ -104,6 +126,10 @@ export interface ShareDocumentResponse {
     user: ApiUser;
     role: 'viewer' | 'editor';
   };
+}
+
+export interface CreateShareLinkRequest {
+  role: 'viewer' | 'editor';
 }
 
 export interface DeleteDocumentResponse {

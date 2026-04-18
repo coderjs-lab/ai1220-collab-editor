@@ -53,6 +53,15 @@ class ApiAiHistoryItem(ApiBaseModel):
     username: str
 
 
+class ApiShareLink(ApiBaseModel):
+    id: int
+    role: ShareRole
+    token: str
+    url: str
+    created_at: str
+    revoked_at: str | None = None
+
+
 class RegisterRequest(ApiBaseModel):
     username: str = Field(min_length=1)
     email: str = Field(min_length=3)
@@ -91,6 +100,10 @@ class AiSuggestRequest(ApiBaseModel):
     context: str | None = None
 
 
+class CreateShareLinkRequest(ApiBaseModel):
+    role: ShareRole
+
+
 class AuthResponse(ApiBaseModel):
     user: ApiUser
     token: str
@@ -124,6 +137,19 @@ class SharePermission(ApiBaseModel):
 
 class ShareDocumentResponse(ApiBaseModel):
     permission: SharePermission
+
+
+class ShareLinkResponse(ApiBaseModel):
+    share_link: ApiShareLink
+
+
+class DocumentShareLinksResponse(ApiBaseModel):
+    share_links: list[ApiShareLink]
+
+
+class AcceptShareLinkResponse(ApiBaseModel):
+    document: ApiDocument
+    role: Role
 
 
 class DeleteDocumentResponse(ApiBaseModel):

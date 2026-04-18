@@ -1,15 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import Highlight from '@tiptap/extension-highlight';
+import Link from '@tiptap/extension-link';
 import StarterKit from '@tiptap/starter-kit';
+import TaskItem from '@tiptap/extension-task-item';
+import TaskList from '@tiptap/extension-task-list';
+import TextAlign from '@tiptap/extension-text-align';
+import Underline from '@tiptap/extension-underline';
 import { type Editor, useEditor } from '@tiptap/react';
+import { common, createLowlight } from 'lowlight';
+import { IndexeddbPersistence } from 'y-indexeddb';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { api, ApiError } from '../../services/api';
 import type { ApiDocument, ApiUser, DocumentSessionResponse, RichTextContent } from '../../types/api';
 import { defaultRichTextContent, isRichTextEmpty, plainTextToRichText, richTextToPlainText } from './richText';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type SaveState = 'idle' | 'queued' | 'saving' | 'saved' | 'error';
+type PresenceActivity = 'typing' | 'active' | 'idle';
 
 export type CollabConnectionState =
   | 'idle'
@@ -26,6 +36,8 @@ export interface PresenceUser {
   name: string;
   color: string;
   role: 'owner' | 'editor' | 'viewer' | 'unknown';
+  activity: PresenceActivity;
+  lastActiveAt: string | null;
   active: boolean;
   connections: number;
 }
@@ -41,6 +53,7 @@ interface UseCollaborativeEditorOptions {
 }
 
 const USER_COLORS = ['#115e59', '#b45309', '#7c3aed', '#be123c', '#0f766e', '#1d4ed8'];
+const lowlight = createLowlight(common);
 
 function colorForUser(userId: number | null) {
   if (userId === null) {
@@ -126,6 +139,16 @@ function renderSelection(user: Record<string, unknown>) {
   };
 }
 
+function activityRank(activity: PresenceActivity) {
+  if (activity === 'typing') {
+    return 3;
+  }
+  if (activity === 'active') {
+    return 2;
+  }
+  return 1;
+}
+
 function awarenessToPresence(provider: WebsocketProvider | null): PresenceUser[] {
   if (!provider) {
     return [];
@@ -150,6 +173,14 @@ function awarenessToPresence(provider: WebsocketProvider | null): PresenceUser[]
           user?.role === 'owner' || user?.role === 'editor' || user?.role === 'viewer'
             ? user.role
             : 'unknown',
+        activity:
+          user?.activity === 'typing' || user?.activity === 'idle' ? user.activity : 'active',
+        lastActiveAt:
+          typeof user?.lastActiveAt === 'string'
+            ? user.lastActiveAt
+            : typeof user?.last_active_at === 'string'
+              ? user.last_active_at
+              : null,
         active: true,
         connections: 1,
       } satisfies PresenceUser;
@@ -169,6 +200,11 @@ function awarenessToPresence(provider: WebsocketProvider | null): PresenceUser[]
     deduped.set(key, {
       ...existing,
       clientId: Math.min(existing.clientId, user.clientId),
+      activity:
+        activityRank(user.activity) > activityRank(existing.activity)
+          ? user.activity
+          : existing.activity,
+      lastActiveAt: user.lastActiveAt ?? existing.lastActiveAt,
       active: existing.active || user.active,
       connections: existing.connections + 1,
     });
@@ -190,9 +226,11 @@ export function useCollaborativeEditor({
   const [connectionMessage, setConnectionMessage] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
   const [plainText, setPlainText] = useState('');
+  const [offlineHydrationReady, setOfflineHydrationReady] = useState(false);
 
   const ydoc = useMemo(() => new Y.Doc(), [documentId]);
   const lastSavedTitleRef = useRef(document?.title ?? '');
@@ -202,6 +240,10 @@ export function useCollaborativeEditor({
   const currentJsonRef = useRef<RichTextContent>(document?.content ?? defaultRichTextContent());
   const titleRef = useRef(title);
   const seededRef = useRef(false);
+  const pendingPersistRef = useRef(false);
+  const isPersistingRef = useRef(false);
+  const autosaveTimerRef = useRef<number | null>(null);
+  const typingResetTimerRef = useRef<number | null>(null);
 
   const userDescriptor = useMemo(
     () => ({
@@ -209,6 +251,8 @@ export function useCollaborativeEditor({
       name: currentUser?.username ?? 'Anonymous',
       role: session?.role ?? (canEdit ? 'editor' : 'viewer'),
       color: colorForUser(currentUser?.id ?? null),
+      activity: 'active' as PresenceActivity,
+      lastActiveAt: new Date().toISOString(),
     }),
     [canEdit, currentUser?.id, currentUser?.username, session?.role],
   );
@@ -223,6 +267,7 @@ export function useCollaborativeEditor({
 
   useEffect(() => {
     seededRef.current = false;
+    setOfflineHydrationReady(false);
     lastSavedTitleRef.current = document?.title ?? '';
     lastSavedContentRef.current = JSON.stringify(document?.content ?? defaultRichTextContent());
     currentJsonRef.current = document?.content ?? defaultRichTextContent();
@@ -230,6 +275,8 @@ export function useCollaborativeEditor({
     setIsDirty(false);
     setSaveState('idle');
     setSaveError(null);
+    setSaveMessage(null);
+    pendingPersistRef.current = false;
   }, [document?.id, document?.updated_at]);
 
   const provider = useMemo(() => {
@@ -243,6 +290,58 @@ export function useCollaborativeEditor({
     });
   }, [documentId, session, ydoc]);
 
+  const offlinePersistence = useMemo(() => {
+    if (!documentId) {
+      return null;
+    }
+
+    return new IndexeddbPersistence(`draftboard:${documentId}`, ydoc);
+  }, [documentId, ydoc]);
+
+  const updateLocalActivity = useCallback(
+    (activity: PresenceActivity, bumpTimestamp = true) => {
+      if (!provider) {
+        return;
+      }
+
+      const currentState = provider.awareness.getLocalState();
+      const existingUser =
+        currentState &&
+        typeof currentState === 'object' &&
+        'user' in currentState &&
+        currentState.user &&
+        typeof currentState.user === 'object'
+          ? (currentState.user as Record<string, unknown>)
+          : null;
+      const timestamp =
+        bumpTimestamp || typeof existingUser?.lastActiveAt !== 'string'
+          ? new Date().toISOString()
+          : existingUser.lastActiveAt;
+
+      provider.awareness.setLocalStateField('user', {
+        ...userDescriptor,
+        activity,
+        lastActiveAt: timestamp,
+      });
+    },
+    [provider, userDescriptor],
+  );
+
+  const markTyping = useCallback(() => {
+    if (!canEdit) {
+      return;
+    }
+
+    updateLocalActivity('typing');
+    if (typingResetTimerRef.current !== null) {
+      window.clearTimeout(typingResetTimerRef.current);
+    }
+    typingResetTimerRef.current = window.setTimeout(() => {
+      updateLocalActivity(window.document.hasFocus() ? 'active' : 'idle', false);
+      typingResetTimerRef.current = null;
+    }, 1400);
+  }, [canEdit, updateLocalActivity]);
+
   const editor = useEditor(
     {
       immediatelyRender: false,
@@ -250,11 +349,35 @@ export function useCollaborativeEditor({
       editorProps: {
         attributes: {
           class: 'draftboard-editor editor-copy',
+          'data-testid': 'collaborative-editor-content',
         },
       },
       extensions: [
         StarterKit.configure({
           history: false,
+          codeBlock: false,
+        }),
+        CodeBlockLowlight.configure({
+          lowlight,
+          defaultLanguage: 'javascript',
+          languageClassPrefix: 'language-',
+        }),
+        Underline,
+        Highlight.configure({
+          multicolor: false,
+        }),
+        Link.configure({
+          openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+          defaultProtocol: 'https',
+        }),
+        TextAlign.configure({
+          types: ['heading', 'paragraph'],
+        }),
+        TaskList,
+        TaskItem.configure({
+          nested: true,
         }),
         Collaboration.configure({
           document: ydoc,
@@ -271,15 +394,6 @@ export function useCollaborativeEditor({
           : []),
       ],
       onCreate({ editor: nextEditor }) {
-        if (
-          !seededRef.current &&
-          !isRichTextEmpty(document?.content) &&
-          richTextToPlainText(nextEditor.getJSON() as RichTextContent).trim().length === 0
-        ) {
-          nextEditor.commands.setContent(document?.content ?? defaultRichTextContent(), false);
-          seededRef.current = true;
-        }
-
         const json = nextEditor.getJSON() as RichTextContent;
         currentJsonRef.current = json;
         setPlainText(richTextToPlainText(json));
@@ -289,23 +403,83 @@ export function useCollaborativeEditor({
         currentJsonRef.current = json;
         const nextPlainText = richTextToPlainText(json);
         setPlainText(nextPlainText);
-        setIsDirty(
+        const nextIsDirty =
           titleRef.current !== lastSavedTitleRef.current ||
-            JSON.stringify(json) !== lastSavedContentRef.current,
-        );
+          JSON.stringify(json) !== lastSavedContentRef.current;
+        setIsDirty(nextIsDirty);
+
+        if (nextIsDirty && canEdit) {
+          setSaveState((current) => (current === 'saving' ? current : 'queued'));
+          setSaveError(null);
+          setSaveMessage(null);
+          markTyping();
+        }
       },
     },
-    [ydoc, provider, canEdit, userDescriptor, document?.id],
+    [ydoc, provider, canEdit, userDescriptor, document?.id, markTyping],
   );
 
   useEffect(() => {
+    let cancelled = false;
+
+    if (!documentId) {
+      setOfflineHydrationReady(true);
+      return;
+    }
+
+    if (!offlinePersistence) {
+      setOfflineHydrationReady(true);
+      return;
+    }
+
+    if (offlinePersistence.synced) {
+      setOfflineHydrationReady(true);
+      return;
+    }
+
+    void offlinePersistence.whenSynced.then(() => {
+      if (!cancelled) {
+        setOfflineHydrationReady(true);
+      }
+    });
+
     return () => {
+      cancelled = true;
+    };
+  }, [documentId, offlinePersistence]);
+
+  useEffect(() => {
+    if (!editor || !offlineHydrationReady || seededRef.current) {
+      return;
+    }
+
+    const hasExistingYState = ydoc.getXmlFragment('default').length > 0;
+    if (
+      !hasExistingYState &&
+      !isRichTextEmpty(document?.content) &&
+      richTextToPlainText(editor.getJSON() as RichTextContent).trim().length === 0
+    ) {
+      editor.commands.setContent(document?.content ?? defaultRichTextContent(), false);
+    }
+
+    seededRef.current = true;
+  }, [document?.content, editor, offlineHydrationReady, ydoc]);
+
+  useEffect(() => {
+    return () => {
+      if (typingResetTimerRef.current !== null) {
+        window.clearTimeout(typingResetTimerRef.current);
+      }
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+      }
       if (provider) {
         provider.awareness.setLocalState(null);
         provider.destroy();
       }
+      offlinePersistence?.destroy();
     };
-  }, [provider]);
+  }, [offlinePersistence, provider]);
 
   useEffect(() => {
     if (!editor) {
@@ -317,6 +491,38 @@ export function useCollaborativeEditor({
       editor.commands.updateUser(userDescriptor);
     }
   }, [editor, canEdit, userDescriptor]);
+
+  useEffect(() => {
+    if (!provider) {
+      return;
+    }
+
+    updateLocalActivity('active');
+
+    return () => {
+      provider.awareness.setLocalState(null);
+    };
+  }, [provider, updateLocalActivity]);
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const handleSelection = () => updateLocalActivity(editor.isFocused ? 'active' : 'idle', false);
+    const handleFocus = () => updateLocalActivity('active');
+    const handleBlur = () => updateLocalActivity('idle', false);
+
+    editor.on('selectionUpdate', handleSelection);
+    editor.on('focus', handleFocus);
+    editor.on('blur', handleBlur);
+
+    return () => {
+      editor.off('selectionUpdate', handleSelection);
+      editor.off('focus', handleFocus);
+      editor.off('blur', handleBlur);
+    };
+  }, [editor, updateLocalActivity]);
 
   useEffect(() => {
     if (!provider) {
@@ -338,6 +544,7 @@ export function useCollaborativeEditor({
       setConnectionMessage(
         seededRef.current ? 'Live collaboration is active.' : 'Shared session is ready.',
       );
+      updateLocalActivity('active');
       setPresenceUsers(awarenessToPresence(provider));
     };
 
@@ -345,6 +552,7 @@ export function useCollaborativeEditor({
       if (event.status === 'connected') {
         setConnectionState((current) => (current === 'reconnecting' ? 'resynced' : 'connected'));
         setConnectionMessage('Connected to the collaboration session.');
+        updateLocalActivity('active');
         return;
       }
 
@@ -361,7 +569,7 @@ export function useCollaborativeEditor({
       setConnectionState(seededRef.current ? 'reconnecting' : 'offline');
       setConnectionMessage(
         seededRef.current
-          ? 'Connection dropped. Reconnecting to the shared session.'
+          ? 'Connection dropped. Local edits stay on this device and will sync when collaboration reconnects.'
           : 'Collaboration is offline for this document.',
       );
     };
@@ -372,7 +580,9 @@ export function useCollaborativeEditor({
 
     const closeHandler = () => {
       setConnectionState(seededRef.current ? 'reconnecting' : 'offline');
-      setConnectionMessage('The collaboration socket closed. Trying to recover.');
+      setConnectionMessage(
+        'The collaboration socket closed. Local edits are preserved and Draftboard is trying to recover.',
+      );
     };
 
     const errorHandler = () => {
@@ -394,15 +604,20 @@ export function useCollaborativeEditor({
       provider.off('connection-close', closeHandler);
       provider.off('connection-error', errorHandler);
     };
-  }, [provider]);
+  }, [provider, updateLocalActivity]);
 
-  async function persistSnapshot() {
+  const persistSnapshot = useCallback(async () => {
     if (!documentId || !document || !canEdit) {
       return false;
     }
+    if (isPersistingRef.current) {
+      return false;
+    }
 
+    isPersistingRef.current = true;
     setSaveState('saving');
     setSaveError(null);
+    setSaveMessage(null);
 
     try {
       const response = await api.documents.update(documentId, {
@@ -415,17 +630,118 @@ export function useCollaborativeEditor({
       currentJsonRef.current = response.document.content;
       setPlainText(richTextToPlainText(response.document.content));
       setIsDirty(false);
+      pendingPersistRef.current = false;
       setSaveState('saved');
+      setSaveMessage(null);
       onPersisted(response.document);
       return true;
     } catch (error) {
+      if (!(error instanceof ApiError)) {
+        pendingPersistRef.current = true;
+        setSaveState('queued');
+        setSaveError(null);
+        setSaveMessage(
+          'Working offline. Changes are stored locally and will sync when the connection returns.',
+        );
+        return false;
+      }
+
       setSaveState('error');
-      setSaveError(
-        error instanceof ApiError ? error.error : 'Could not persist the latest document state.',
-      );
+      setSaveMessage(null);
+      setSaveError(error.error);
       return false;
+    } finally {
+      isPersistingRef.current = false;
     }
-  }
+  }, [canEdit, document, documentId, onPersisted]);
+
+  const applyServerDocument = useCallback(
+    (nextDocument: ApiDocument) => {
+      lastSavedTitleRef.current = nextDocument.title;
+      lastSavedContentRef.current = JSON.stringify(nextDocument.content);
+      currentJsonRef.current = nextDocument.content;
+      titleRef.current = nextDocument.title;
+      pendingPersistRef.current = false;
+      setPlainText(richTextToPlainText(nextDocument.content));
+      setIsDirty(false);
+      setSaveState('idle');
+      setSaveError(null);
+      setSaveMessage(null);
+
+      if (!editor) {
+        return;
+      }
+
+      editor.commands.setContent(nextDocument.content, false);
+    },
+    [editor],
+  );
+
+  useEffect(() => {
+    if (!canEdit || !documentId || !document || !isDirty || isPersistingRef.current) {
+      return;
+    }
+
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = window.setTimeout(() => {
+      void persistSnapshot();
+    }, 1200);
+
+    return () => {
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [canEdit, document, documentId, isDirty, persistSnapshot, title]);
+
+  useEffect(() => {
+    if (!pendingPersistRef.current || !canEdit || !documentId || !document) {
+      return;
+    }
+
+    const retryPersist = () => {
+      if (!pendingPersistRef.current || !navigator.onLine) {
+        return;
+      }
+      void persistSnapshot();
+    };
+
+    const shouldRetrySoon =
+      navigator.onLine &&
+      (connectionState === 'connected' ||
+        connectionState === 'resynced' ||
+        connectionState === 'idle');
+    let retryTimer: number | null = null;
+
+    if (shouldRetrySoon) {
+      retryTimer = window.setTimeout(retryPersist, 500);
+    }
+
+    window.addEventListener('online', retryPersist);
+
+    return () => {
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+      }
+      window.removeEventListener('online', retryPersist);
+    };
+  }, [canEdit, connectionState, document, documentId, persistSnapshot]);
+
+  useEffect(() => {
+    if (saveState !== 'saved') {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSaveState((current) => (current === 'saved' ? 'idle' : current));
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
+  }, [saveState]);
 
   function replaceWithSuggestion(suggestion: string) {
     if (!editor || !canEdit) {
@@ -446,9 +762,10 @@ export function useCollaborativeEditor({
   }
 
   function clearTransientSaveState() {
-    if (saveState !== 'idle' || saveError) {
+    if (saveState !== 'idle' || saveError || saveMessage) {
       setSaveState('idle');
       setSaveError(null);
+      setSaveMessage(null);
     }
   }
 
@@ -459,9 +776,11 @@ export function useCollaborativeEditor({
     presenceUsers,
     saveState,
     saveError,
+    saveMessage,
     isDirty,
     plainText,
     persistSnapshot,
+    applyServerDocument,
     replaceWithSuggestion,
     appendSuggestion,
     clearTransientSaveState,

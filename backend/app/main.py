@@ -12,7 +12,7 @@ from .config import settings
 from .database import create_connection, init_database
 from . import repository
 from .realtime import CollaborationServer, build_socket, token_from_query
-from .routers import access, ai, auth, documents, sessions
+from .routers import access, ai, auth, documents, sessions, share_links
 from .schemas import HealthResponse
 from .security import decode_token
 
@@ -81,6 +81,7 @@ def health():
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(access.router)
+app.include_router(share_links.router)
 app.include_router(ai.router)
 app.include_router(sessions.router)
 

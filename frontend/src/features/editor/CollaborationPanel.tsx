@@ -50,6 +50,25 @@ function stateAccent(state: CollabConnectionState) {
   return 'bg-slate-400';
 }
 
+function stateSummary(state: CollabConnectionState) {
+  if (state === 'connected' || state === 'resynced') {
+    return 'Shared session';
+  }
+  if (state === 'connecting') {
+    return 'Joining room';
+  }
+  if (state === 'reconnecting') {
+    return 'Recovering sync';
+  }
+  if (state === 'offline') {
+    return 'Retrying later';
+  }
+  if (state === 'error') {
+    return 'Needs attention';
+  }
+  return 'Waiting';
+}
+
 function roleLabel(role: PresenceUser['role']) {
   if (role === 'owner') {
     return 'Owner';
@@ -61,6 +80,16 @@ function roleLabel(role: PresenceUser['role']) {
     return 'Viewer';
   }
   return 'Guest';
+}
+
+function activityLabel(activity: PresenceUser['activity']) {
+  if (activity === 'typing') {
+    return 'typing';
+  }
+  if (activity === 'active') {
+    return 'active';
+  }
+  return 'idle';
 }
 
 interface CollaborationPanelProps {
@@ -78,48 +107,78 @@ export function CollaborationPanel({
   onRetrySession,
   embedded = false,
 }: CollaborationPanelProps) {
-  const containerClassName = embedded ? '' : 'shell-card rounded-[32px] p-5';
+  const containerClassName = embedded ? 'min-w-0' : 'shell-card min-w-0 rounded-[32px] p-5';
+  const statsGridClassName = embedded
+    ? 'mt-4 grid grid-cols-3 gap-2'
+    : 'mt-5 grid gap-3 sm:grid-cols-3';
+  const typingUsers = presenceUsers.filter((user) => user.activity === 'typing');
 
   return (
     <section className={containerClassName}>
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
           Collaboration
         </p>
         <h2 className="font-display text-3xl font-semibold tracking-tight text-[color:var(--text)]">
           Live session
         </h2>
-        <p className="text-sm leading-6 text-[color:var(--text-soft)]">
-          Shared editing, presence, reconnect handling, and remote carets are managed through the
-          active collaboration channel.
+        <p className="break-words text-sm leading-6 text-[color:var(--text-soft)]">
+          {embedded
+            ? 'Shared editing, presence, and reconnect status.'
+            : 'Shared editing, presence, reconnect handling, and remote carets are managed through the active collaboration channel.'}
         </p>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-[color:var(--text)]">Connection</p>
+      <div className={statsGridClassName}>
+        <div className="min-w-0 rounded-[20px] border border-[color:var(--border)] bg-white/80 px-3 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[0.58rem] font-semibold uppercase tracking-[0.15em] text-[color:var(--text-soft)]">
+              Sync
+            </p>
             <span
-              className={`h-2.5 w-2.5 rounded-full ${stateAccent(state)} ${
+              className={`mt-px h-2 w-2 shrink-0 rounded-full ${stateAccent(state)} ${
                 state === 'connecting' || state === 'reconnecting' ? 'animate-pulse' : ''
               }`}
             />
           </div>
-          <p className="mt-4 text-2xl font-semibold tracking-tight text-[color:var(--text)]">
-            {stateLabel(state)}
+          <div className="mt-2 flex items-center gap-2">
+            <p
+              className={[
+                'min-w-0 break-words font-semibold text-[color:var(--text)]',
+                embedded ? 'text-[0.76rem] leading-5' : 'text-sm',
+              ].join(' ')}
+            >
+              {stateLabel(state)}
+            </p>
+          </div>
+          {!embedded ? (
+            <p className="mt-2 text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--text-soft)]">
+              {stateSummary(state)}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="min-w-0 rounded-[20px] border border-[color:var(--border)] bg-white/80 px-3 py-3">
+          <p className="text-[0.58rem] font-semibold uppercase tracking-[0.15em] text-[color:var(--text-soft)]">
+            Present
           </p>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-            {message ?? 'The shared editor session is healthy.'}
+          <p className="mt-2 text-[1.12rem] font-semibold leading-none tracking-tight text-[color:var(--text)]">
+            {presenceUsers.length}
+          </p>
+          <p className="mt-1 text-[0.62rem] font-medium uppercase tracking-[0.13em] text-[color:var(--text-soft)]">
+            Online
           </p>
         </div>
 
-        <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
-          <p className="text-sm font-semibold text-[color:var(--text)]">Present now</p>
-          <p className="mt-4 text-2xl font-semibold tracking-tight text-[color:var(--text)]">
-            {presenceUsers.length}
+        <div className="min-w-0 rounded-[20px] border border-[color:var(--border)] bg-white/80 px-3 py-3">
+          <p className="text-[0.58rem] font-semibold uppercase tracking-[0.15em] text-[color:var(--text-soft)]">
+            Typing
           </p>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-            Unique active collaborators in the current session.
+          <p className="mt-2 text-[1.12rem] font-semibold leading-none tracking-tight text-[color:var(--text)]">
+            {typingUsers.length}
+          </p>
+          <p className="mt-1 text-[0.62rem] font-medium uppercase tracking-[0.13em] text-[color:var(--text-soft)]">
+            Active now
           </p>
         </div>
       </div>
@@ -138,71 +197,55 @@ export function CollaborationPanel({
         </div>
       ) : null}
 
-      <div className="mt-5 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
-        <div className="flex flex-wrap gap-2">
-          {presenceUsers.length === 0 ? (
-            <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-3 py-2 text-sm text-[color:var(--text-soft)]">
-              No active collaborators visible right now.
-            </span>
-          ) : (
-            presenceUsers.map((user) => (
-              <span
-                key={`${user.userId ?? user.name}-${user.role}`}
-                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-3 py-2 text-sm"
-              >
-                <span
-                  aria-hidden="true"
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: user.color }}
-                />
-                <span className="font-semibold text-[color:var(--text)]">{user.name}</span>
-                <span className="text-[color:var(--text-soft)]">{roleLabel(user.role)}</span>
-              </span>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="mt-5 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
-        <div className="space-y-2">
+      <div className="mt-4 min-w-0 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
+        <div className="min-w-0 space-y-2">
           <p className="text-sm font-semibold text-[color:var(--text)]">Active collaborators</p>
-          <p className="text-sm leading-6 text-[color:var(--text-soft)]">
-            Everyone currently connected to this shared document session.
-          </p>
+          {!embedded ? (
+            <p className="break-words text-sm leading-6 text-[color:var(--text-soft)]">
+              Everyone currently connected to this shared document session.
+            </p>
+          ) : null}
         </div>
 
-        <div className="mt-4 space-y-3">
+        <div className="mt-3 space-y-2.5">
           {presenceUsers.length === 0 ? (
-            <div className="rounded-[20px] border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-4 py-4 text-sm leading-6 text-[color:var(--text-soft)]">
+            <div className="rounded-[18px] border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-3 py-3 text-sm leading-6 text-[color:var(--text-soft)]">
               No active collaborators visible right now.
             </div>
           ) : (
             presenceUsers.map((user) => (
               <div
                 key={`${user.userId ?? user.name}-${user.role}`}
-                className="flex items-center justify-between gap-3 rounded-[20px] border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-4 py-3"
+                className="flex min-w-0 items-center justify-between gap-3 rounded-[18px] border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-3 py-2.5"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <span
                     aria-hidden="true"
-                    className="h-3 w-3 rounded-full"
+                    className="h-2.5 w-2.5 rounded-full"
                     style={{ backgroundColor: user.color }}
                   />
-                  <div>
-                    <p className="text-sm font-semibold text-[color:var(--text)]">{user.name}</p>
-                    <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
-                      {roleLabel(user.role)}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[color:var(--text)]">{user.name}</p>
+                    <p className="break-words text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-soft)]">
+                      {roleLabel(user.role)} · {activityLabel(user.activity)}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   {user.connections > 1 ? (
-                    <span className="rounded-full border border-[color:var(--border)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
-                      {user.connections} tabs
+                    <span className="rounded-full border border-[color:var(--border)] bg-white px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-soft)]">
+                      {user.connections}x
                     </span>
                   ) : null}
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900">
-                    online
+                  <span
+                    className={[
+                      'rounded-full border px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em]',
+                      user.activity === 'typing'
+                        ? 'border-violet-200 bg-violet-50 text-violet-900'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-900',
+                    ].join(' ')}
+                  >
+                    {user.activity === 'typing' ? 'typing' : 'online'}
                   </span>
                 </div>
               </div>
