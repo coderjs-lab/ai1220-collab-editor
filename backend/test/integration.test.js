@@ -251,16 +251,63 @@ describe('Sharing', () => {
   });
 });
 
-// ─── AI stub ─────────────────────────────────────────────────────────────────
+// ─── AI integration ───────────────────────────────────────────────────────────
 
-describe('AI suggest (stub)', () => {
-  test('POST /ai/suggest returns stub response and logs interaction', async () => {
-    const { status, body } = await req(
-      'POST', `/api/documents/${shared.docId}/ai/suggest`,
-      { token: shared.aliceToken, body: { prompt: 'Summarize this document.' } }
-    );
-    assert.equal(status, 200);
-    assert.ok(typeof body.suggestion === 'string');
+describe('AI suggest integration', () => {
+  test('POST /ai/suggest forwards document_context to the AI service and logs interaction', async () => {
+    const aiServiceBase = 'http://mock-ai-service.test';
+    const originalFetch = global.fetch;
+    const originalAiServiceUrl = process.env.AI_SERVICE_URL;
+    let capturedPayload = null;
+
+    process.env.AI_SERVICE_URL = aiServiceBase;
+    global.fetch = async (input, init = {}) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+
+      if (url === `${aiServiceBase}/complete`) {
+        capturedPayload = JSON.parse(String(init.body ?? '{}'));
+        return new Response(
+          JSON.stringify({ suggestion: '[mock-ai] concise summary' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return originalFetch(input, init);
+    };
+
+    try {
+      const { status: docStatus, body: docBody } = await req(
+        'GET',
+        `/api/documents/${shared.docId}`,
+        { token: shared.aliceToken }
+      );
+      assert.equal(docStatus, 200);
+      const expectedDocumentContext = docBody.document.content;
+
+      const { status, body } = await req(
+        'POST', `/api/documents/${shared.docId}/ai/suggest`,
+        { token: shared.aliceToken, body: { prompt: 'Summarize this document.' } }
+      );
+      assert.equal(status, 200);
+      assert.equal(body.suggestion, '[mock-ai] concise summary');
+
+      assert.ok(capturedPayload, 'AI service payload should be captured');
+      assert.equal(capturedPayload.prompt, 'Summarize this document.');
+      assert.equal(capturedPayload.scope, 'document');
+      assert.equal(capturedPayload.document_context, expectedDocumentContext);
+    } finally {
+      global.fetch = originalFetch;
+      if (originalAiServiceUrl === undefined) {
+        delete process.env.AI_SERVICE_URL;
+      } else {
+        process.env.AI_SERVICE_URL = originalAiServiceUrl;
+      }
+    }
   });
 
   test('GET /ai/history returns logged interactions', async () => {
