@@ -1,0 +1,58 @@
+C4Component
+    title Level 3 - Component Diagram: REST API Server
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+
+    Container_Boundary(api, "REST API Server (Node.js + Express)") {
+
+        %% Entry layer
+        Component(router, "HTTP Router", "Express Router", "Dispatches requests to the correct module")
+        Component(authmw, "Auth Middleware", "Middleware", "Validates JWT and attaches user context")
+
+        %% Controller layer
+        Component(doc_api, "Document API", "Controller", "Documents, versions, and export")
+        Component(access_api, "Access API", "Controller", "Permissions and sharing")
+        Component(session_api, "Session API", "Controller", "Collaboration session tokens")
+        Component(ai_api, "AI API", "Controller", "AI actions and history")
+
+        %% Service layer
+        Component(doc_service, "Document Service", "Business Logic", "Document rules, versioning, ownership checks")
+        Component(auth_service, "Auth Service", "Business Logic", "Token validation and session handling")
+        Component(ai_service, "AI Service", "Business Logic", "Prompt building, quota checks, model dispatch")
+
+        %% Data / integration layer
+        Component(doc_repo, "Document Repository", "Data Access", "Documents, versions, AI records")
+        Component(user_repo, "User Repository", "Data Access", "Users, memberships, permissions")
+        Component(cache_client, "Cache Client", "Redis Client", "Sessions, quotas, task state")
+        Component(llm_client, "LLM Client", "HTTP Client", "HTTP proxy to Python AI Service")
+    }
+
+    ContainerDb(db, "PostgreSQL", "Primary database")
+    ContainerDb(redis, "Redis", "Cache and transient state")
+    Container(ai_runtime, "AI Service", "Python + FastAPI", "LLM orchestration service")
+    System_Ext(llm, "LLM Provider", "External AI API")
+
+    Rel(router, authmw, "Protected requests")
+    Rel(router, doc_api, "Document routes")
+    Rel(router, access_api, "Permission routes")
+    Rel(router, session_api, "Session routes")
+    Rel(router, ai_api, "AI routes")
+
+    Rel(authmw, auth_service, "Validate token")
+
+    Rel(doc_api, doc_service, "Use")
+    Rel(access_api, user_repo, "Use")
+    Rel(session_api, auth_service, "Use")
+    Rel(ai_api, ai_service, "Use")
+
+    Rel(doc_service, doc_repo, "Read/write")
+    Rel(doc_service, user_repo, "Check access")
+    Rel(auth_service, cache_client, "Manage sessions")
+    Rel(ai_service, llm_client, "Send prompt")
+    Rel(ai_service, cache_client, "Track quota/jobs")
+    Rel(ai_service, doc_repo, "Store AI history")
+
+    Rel(doc_repo, db, "SQL")
+    Rel(user_repo, db, "SQL")
+    Rel(cache_client, redis, "Redis")
+    Rel(llm_client, ai_runtime, "POST /complete", "HTTP / JSON")
+    Rel(ai_runtime, llm, "Prompts & completions", "HTTPS")

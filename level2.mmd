@@ -1,0 +1,28 @@
+C4Container
+    title Level 2 - Container Diagram: Collaborative Document Editor
+            UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="2")
+
+    Person(user, "User", "Any authenticated role")
+
+    System_Boundary(b, "CDE Platform") {
+        Container(web, "Web App", "React + TypeScript", "Editor UI, AI panel,<br/>presence & doc management")
+        Container(api, "REST API", "Node.js + Express", "Auth, CRUD, versioning,<br/>permissions & AI lifecycle")
+        Container(rt, "Collab Server", "Node.js + Socket.IO", "WebSocket rooms,<br/>delta broadcast & presence")
+        Container(ai, "AI Service", "Python + FastAPI", "Prompt construction,<br/>LLM calls & quota control")
+        ContainerDb(db, "Primary DB", "PostgreSQL", "Docs, users, versions,<br/>permissions & AI history")
+        ContainerDb(cache, "Cache", "Redis", "Sessions, presence,<br/>AI task state & pub/sub")
+    }
+
+    System_Ext(llm, "LLM Provider", "External AI API")
+    System_Ext(idp, "Identity Provider", "OAuth 2.0 / OIDC")
+
+    Rel(user, web, "Uses", "HTTPS")
+    Rel(web, api, "REST calls", "HTTPS / JSON")
+    Rel(web, rt, "Live events", "WebSocket")
+    Rel(api, db, "Read / Write", "SQL")
+    Rel(api, cache, "Sessions & task state", "Redis")
+    Rel(api, ai, "Dispatch AI completion", "HTTP / JSON")
+    Rel(rt, cache, "Pub/sub deltas & presence", "Redis")
+    Rel(rt, db, "Load state & checkpoints", "SQL")
+    Rel(ai, llm, "Prompts & completions", "HTTPS")
+    Rel(api, idp, "Token validation", "OIDC")
