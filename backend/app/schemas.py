@@ -1,152 +1,158 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-Role = Literal['viewer', 'editor']
+Role = Literal["owner", "editor", "viewer"]
+ShareRole = Literal["editor", "viewer"]
 
 
 class ApiBaseModel(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
-class UserOut(ApiBaseModel):
+class ApiUser(ApiBaseModel):
     id: int
     username: str
     email: str
 
 
-class AuthResponse(ApiBaseModel):
-    user: UserOut
-    token: str
+class ApiDocument(ApiBaseModel):
+    id: int
+    title: str
+    content: dict[str, Any]
+    owner_id: int
+    created_at: str
+    updated_at: str
+
+
+class ApiCollaborator(ApiBaseModel):
+    id: int
+    username: str
+    email: str
+    role: ShareRole
+
+
+class ApiVersion(ApiBaseModel):
+    id: int
+    document_id: int
+    created_by: int
+    created_by_username: str
+    content: dict[str, Any]
+    created_at: str
+    restored_from: int | None = None
+
+
+class ApiAiHistoryItem(ApiBaseModel):
+    id: int
+    prompt: str
+    response: str | None
+    created_at: str
+    username: str
 
 
 class RegisterRequest(ApiBaseModel):
-    username: str = Field(min_length=3, description='Unique username used for sharing.')
-    email: str = Field(description='Email address used for sign-in and sharing.')
-    password: str = Field(min_length=8, description='Plain-text password sent only at auth time.')
+    username: str = Field(min_length=1)
+    email: str = Field(min_length=3)
+    password: str = Field(min_length=6)
 
 
 class LoginRequest(ApiBaseModel):
-    email: str = Field(description='Email address used at registration time.')
-    password: str = Field(min_length=1, description='Current account password.')
+    email: str = Field(min_length=3)
+    password: str = Field(min_length=1)
+
+
+class CreateDocumentRequest(ApiBaseModel):
+    title: str | None = None
+    content: dict[str, Any] | None = None
+
+
+class UpdateDocumentRequest(ApiBaseModel):
+    title: str | None = None
+    content: dict[str, Any] | None = None
+
+
+class ShareDocumentRequest(ApiBaseModel):
+    identifier: str | None = None
+    email: str | None = None
+    role: ShareRole
+
+    @model_validator(mode="after")
+    def validate_identifier(self) -> "ShareDocumentRequest":
+        if not self.identifier and not self.email:
+            raise ValueError("identifier or email is required")
+        return self
+
+
+class AiSuggestRequest(ApiBaseModel):
+    prompt: str = Field(min_length=1)
+    context: str | None = None
+
+
+class AuthResponse(ApiBaseModel):
+    user: ApiUser
+    token: str
 
 
 class MeResponse(ApiBaseModel):
-    user: UserOut
+    user: ApiUser
 
 
 class MessageResponse(ApiBaseModel):
     message: str
 
 
-class DocumentOut(ApiBaseModel):
-    id: int
-    title: str
-    content: str
-    owner_id: int
-    created_at: str
-    updated_at: str
+class DocumentResponse(ApiBaseModel):
+    document: ApiDocument
 
 
 class DocumentListResponse(ApiBaseModel):
-    documents: list[DocumentOut]
-
-
-class DocumentResponse(ApiBaseModel):
-    document: DocumentOut
-
-
-class CreateDocumentRequest(ApiBaseModel):
-    title: str | None = Field(default=None, description='Document title.')
-    content: str | None = Field(default=None, description='Serialized rich-text HTML.')
-
-
-class UpdateDocumentRequest(ApiBaseModel):
-    title: str | None = Field(default=None, description='Updated title, when changed.')
-    content: str | None = Field(default=None, description='Updated serialized rich-text HTML.')
-
-
-class CollaboratorOut(ApiBaseModel):
-    id: int
-    username: str
-    email: str
-    role: Role
+    documents: list[ApiDocument]
 
 
 class DocumentDetailResponse(ApiBaseModel):
-    document: DocumentOut
-    collaborators: list[CollaboratorOut]
-
-
-class ShareDocumentRequest(ApiBaseModel):
-    identifier: str | None = Field(
-        default=None,
-        description='Username or email address for the collaborator.',
-    )
-    email: str | None = Field(
-        default=None,
-        description='Legacy email field accepted during the identifier migration.',
-    )
-    role: Role = Field(description='Role granted to the collaborator.')
-
-    @model_validator(mode='after')
-    def validate_identifier(self) -> 'ShareDocumentRequest':
-        if not self.identifier and not self.email:
-            raise ValueError('identifier or email is required')
-        return self
+    document: ApiDocument
+    collaborators: list[ApiCollaborator]
 
 
 class SharePermission(ApiBaseModel):
-    user: UserOut
-    role: Role
+    user: ApiUser
+    role: ShareRole
 
 
 class ShareDocumentResponse(ApiBaseModel):
     permission: SharePermission
 
 
-class VersionOut(ApiBaseModel):
-    id: int
-    document_id: int
-    created_by: int
-    created_at: str
-    created_by_username: str
-    content: str | None = None
+class DeleteDocumentResponse(ApiBaseModel):
+    message: str
 
 
 class DocumentVersionsResponse(ApiBaseModel):
-    versions: list[VersionOut]
+    versions: list[ApiVersion]
 
 
-class AiSuggestRequest(ApiBaseModel):
-    prompt: str = Field(min_length=1, description='Free-form instruction for the AI assistant.')
-    context: str | None = Field(
-        default=None,
-        description='Context scope or trimmed selection sent alongside the prompt.',
-    )
+class AiHistoryResponse(ApiBaseModel):
+    history: list[ApiAiHistoryItem]
 
 
 class AiSuggestResponse(ApiBaseModel):
     suggestion: str
 
 
-class AiHistoryItem(ApiBaseModel):
-    id: int
-    prompt: str
-    response: str | None = None
-    created_at: str
-    username: str
-    model: str | None = None
-    status: str | None = None
-
-
-class AiHistoryResponse(ApiBaseModel):
-    history: list[AiHistoryItem]
-
-
 class DocumentSessionResponse(ApiBaseModel):
-    sessionToken: str
-    expiresIn: int
+    session_token: str
+    ws_url: str
+    expires_in: int
+    role: Role
+
+
+class HealthResponse(ApiBaseModel):
+    status: str
+
+
+class ApiErrorResponse(ApiBaseModel):
+    model_config = ConfigDict(extra="forbid")
+    error: str

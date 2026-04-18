@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "draftboard-backend"
+version = "0.2.0"
+description = "FastAPI collaboration foundation for Draftboard Assignment 2"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.136.0,<0.137.0",
+  "uvicorn>=0.44.0,<0.45.0",
+  "sqlalchemy>=2.0.49,<2.1.0",
+  "pyjwt>=2.12.1,<3.0.0",
+  "python-dotenv>=1.1.1,<2.0.0",
+  "passlib>=1.7.4,<2.0.0",
+  "bcrypt>=5.0.0,<6.0.0",
+  "ypy-websocket>=0.12.4,<0.13.0",
+  "httpx>=0.28.1,<0.29.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=9.0.3,<10.0.0",
+  "pytest-asyncio>=1.3.0,<2.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools]
+packages = ["app"]

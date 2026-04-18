@@ -1,41 +1,46 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT_DIR"
+BACKEND_DIR="$ROOT_DIR/backend"
+FRONTEND_DIR="$ROOT_DIR/frontend"
+VENV_DIR="$BACKEND_DIR/.venv"
 
-if [[ ! -x ".venv/bin/uvicorn" ]]; then
-  echo "Backend dependencies are missing."
-  echo "Create a virtualenv and install them with:"
-  echo "  python3 -m venv .venv"
-  echo "  .venv/bin/pip install -r backend/requirements.txt"
-  exit 1
+if [[ ! -d "$VENV_DIR" ]]; then
+  python3 -m venv "$VENV_DIR"
 fi
 
-if [[ ! -d "frontend/node_modules" ]]; then
-  echo "Frontend dependencies are missing."
-  echo "Install them with:"
-  echo "  npm --prefix frontend install"
-  exit 1
+if [[ ! -x "$VENV_DIR/bin/uvicorn" ]]; then
+  "$VENV_DIR/bin/pip" install -e "$BACKEND_DIR[dev]"
 fi
 
-if [[ ! -f "backend/.env" && -f "backend/.env.example" ]]; then
-  cp backend/.env.example backend/.env
+if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+  npm --prefix "$FRONTEND_DIR" install
 fi
 
-if [[ ! -f "frontend/.env.local" && -f "frontend/.env.example" ]]; then
-  cp frontend/.env.example frontend/.env.local
+if [[ ! -f "$BACKEND_DIR/.env" && -f "$BACKEND_DIR/.env.example" ]]; then
+  cp "$BACKEND_DIR/.env.example" "$BACKEND_DIR/.env"
+fi
+
+if [[ ! -f "$FRONTEND_DIR/.env.local" && -f "$FRONTEND_DIR/.env.example" ]]; then
+  cp "$FRONTEND_DIR/.env.example" "$FRONTEND_DIR/.env.local"
 fi
 
 cleanup() {
-  if [[ -n "${BACKEND_PID:-}" ]]; then
-    kill "$BACKEND_PID" >/dev/null 2>&1 || true
-  fi
+  kill 0 >/dev/null 2>&1 || true
 }
 
 trap cleanup EXIT INT TERM
 
-.venv/bin/uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000 &
-BACKEND_PID=$!
+(
+  cd "$BACKEND_DIR"
+  "$VENV_DIR/bin/uvicorn" app.main:app --reload --host 0.0.0.0 --port 3001
+) &
 
-npm --prefix frontend run dev -- --host 127.0.0.1
+(
+  cd "$FRONTEND_DIR"
+  npm run dev
+) &
+
+wait

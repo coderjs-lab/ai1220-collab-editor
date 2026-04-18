@@ -1,9 +1,8 @@
 # Dependencies
 node_modules/
 .venv/
-__pycache__/
-*.pyc
 .pytest_cache/
+**/.venv/
 
 # Environment secrets — never commit these
 .env
@@ -23,3 +22,6 @@ backend/tests/.test-editor.db
 .idea/
 *.swp
 .claude/
+__pycache__/
+**/__pycache__/
+*.pyc

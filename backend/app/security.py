@@ -1,22 +1,19 @@
 from __future__ import annotations
 
-from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
-import hashlib
-import hmac
-import os
+from hashlib import sha256
 import secrets
 from typing import Any
 
 import jwt
+from fastapi import HTTPException, status
+from passlib.context import CryptContext
 
 from .config import settings
 
 
-SCRYPT_N = 1 << 14
-SCRYPT_R = 8
-SCRYPT_P = 1
-JWT_ALGORITHM = 'HS256'
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+ALGORITHM = "HS256"
 
 
 def utcnow() -> datetime:
@@ -27,68 +24,57 @@ def utcnow_iso() -> str:
     return utcnow().isoformat()
 
 
-def _b64encode(raw: bytes) -> str:
-    return urlsafe_b64encode(raw).decode('ascii').rstrip('=')
-
-
-def _b64decode(raw: str) -> bytes:
-    padding = '=' * (-len(raw) % 4)
-    return urlsafe_b64decode(raw + padding)
-
-
 def hash_password(password: str) -> str:
-    salt = os.urandom(16)
-    digest = hashlib.scrypt(
-        password.encode('utf-8'),
-        salt=salt,
-        n=SCRYPT_N,
-        r=SCRYPT_R,
-        p=SCRYPT_P,
-        dklen=64,
-    )
-    return f'scrypt${SCRYPT_N}${SCRYPT_R}${SCRYPT_P}${_b64encode(salt)}${_b64encode(digest)}'
+    return pwd_context.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        algorithm, n_value, r_value, p_value, salt, digest = password_hash.split('$')
-    except ValueError:
-        return False
-
-    if algorithm != 'scrypt':
-        return False
-
-    derived = hashlib.scrypt(
-        password.encode('utf-8'),
-        salt=_b64decode(salt),
-        n=int(n_value),
-        r=int(r_value),
-        p=int(p_value),
-        dklen=64,
-    )
-    return hmac.compare_digest(_b64encode(derived), digest)
+    return pwd_context.verify(password, password_hash)
 
 
-def create_access_token(user_id: int, email: str) -> str:
-    expires_at = utcnow() + timedelta(minutes=settings.access_token_minutes)
-    payload = {'sub': str(user_id), 'email': email, 'exp': expires_at}
-    return jwt.encode(payload, settings.jwt_secret, algorithm=JWT_ALGORITHM)
-
-
-def create_collaboration_token(user_id: int, document_id: int) -> str:
-    expires_at = utcnow() + timedelta(hours=1)
-    payload = {
-        'sub': str(user_id),
-        'document_id': document_id,
-        'kind': 'collaboration-session',
-        'exp': expires_at,
+def _encode_token(payload: dict[str, Any], expires_in_seconds: int) -> str:
+    now = utcnow()
+    body = {
+        **payload,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=expires_in_seconds)).timestamp()),
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=JWT_ALGORITHM)
+    return jwt.encode(body, settings.jwt_secret, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> dict[str, Any]:
-    payload = jwt.decode(token, settings.jwt_secret, algorithms=[JWT_ALGORITHM])
-    return {'id': int(payload['sub']), 'email': payload['email']}
+def create_access_token(user: dict[str, Any]) -> str:
+    return _encode_token(
+        {"sub": str(user["id"]), "email": user["email"], "type": "access"},
+        settings.access_token_ttl_seconds,
+    )
+
+
+def create_collab_session_token(*, user: dict[str, Any], document_id: int, role: str) -> str:
+    return _encode_token(
+        {
+            "sub": str(user["id"]),
+            "document_id": int(document_id),
+            "role": role,
+            "username": user["username"],
+            "type": "collab",
+        },
+        settings.collab_session_ttl_seconds,
+    )
+
+
+def decode_token(token: str, *, expected_type: str) -> dict[str, Any]:
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
+    except jwt.PyJWTError as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        ) from error
+
+    if payload.get("type") != expected_type:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+
+    return payload
 
 
 def generate_refresh_token() -> str:
@@ -96,4 +82,4 @@ def generate_refresh_token() -> str:
 
 
 def hash_refresh_token(token: str) -> str:
-    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+    return sha256(token.encode("utf-8")).hexdigest()

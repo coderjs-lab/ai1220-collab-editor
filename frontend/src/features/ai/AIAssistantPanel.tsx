@@ -205,7 +205,8 @@ export function AIAssistantPanel({
             </p>
           ) : (
             <p className="mt-3 text-sm text-[color:var(--text-soft)]">
-              Applying a suggestion updates only your local draft. Save when you are ready.
+              Applying a suggestion writes through the editor transaction layer. Save when you are
+              ready to checkpoint the current shared draft.
             </p>
           )}
         </div>

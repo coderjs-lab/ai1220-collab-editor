@@ -8,6 +8,7 @@ import { InputField } from '../../components/Field';
 import { StatusBanner } from '../../components/StatusBanner';
 import { api, ApiError } from '../../services/api';
 import type { ApiDocument } from '../../types/api';
+import { richTextToPlainText } from '../editor/richText';
 import { excerptText, formatCount, formatRelativeTimestamp } from '../../utils/format';
 
 function DashboardMetric({
@@ -72,7 +73,7 @@ function DocumentCard({
               </h2>
             </Link>
             <p className="text-sm leading-6 text-[color:var(--text-soft)]">
-              {excerptText(document.content, 150)}
+              {excerptText(richTextToPlainText(document.content), 150)}
             </p>
           </div>
         </div>
@@ -337,7 +338,7 @@ export function DocumentsPage() {
       return true;
     }
 
-    return [document.title, document.content]
+    return [document.title, richTextToPlainText(document.content)]
       .join(' ')
       .toLowerCase()
       .includes(normalizedQuery);
