@@ -273,6 +273,7 @@ export function EditorPage() {
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
+  const [selectionText, setSelectionText] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [shareEmail, setShareEmail] = useState('');
@@ -298,6 +299,7 @@ export function EditorPage() {
     setVersions([]);
     setSelectedVersionId(null);
     setCollaborators([]);
+    setSelectionText('');
     setShareError(null);
     setShareMessage(null);
     setCopyMessage(null);
@@ -425,7 +427,7 @@ export function EditorPage() {
     : false;
   const wordCount = countWords(draftContent);
   const characterCount = draftContent.length;
-  const ai = useDocumentAi(document ? String(document.id) : null);
+  const ai = useDocumentAi(document ? String(document.id) : null, selectionText);
   const collaborationSession = useCollaborationSession(document ? String(document.id) : null);
 
   useUnsavedChangesPrompt(canEdit && isDirty);
@@ -699,6 +701,7 @@ export function EditorPage() {
           canInvoke={canInvokeAi}
           context={ai.context}
           embedded
+          hasSelectionContext={selectionText.length > 0}
           history={ai.history}
           historyError={ai.historyError}
           isLoadingHistory={ai.isLoadingHistory}
@@ -734,11 +737,13 @@ export function EditorPage() {
 
   function handleReplaceWithSuggestion(suggestion: string) {
     resetTransientMessages();
+    setSelectionText('');
     setDraftContent(suggestion);
   }
 
   function handleAppendSuggestion(suggestion: string) {
     resetTransientMessages();
+    setSelectionText('');
     setDraftContent((current) =>
       current.trim().length > 0 ? `${current.trimEnd()}\n\n${suggestion}` : suggestion,
     );
@@ -905,7 +910,14 @@ export function EditorPage() {
                 label="Content"
                 onChange={(event) => {
                   resetTransientMessages();
+                  setSelectionText('');
                   setDraftContent(event.target.value);
+                }}
+                onSelect={(event) => {
+                  const target = event.currentTarget;
+                  const start = target.selectionStart ?? 0;
+                  const end = target.selectionEnd ?? 0;
+                  setSelectionText(start === end ? '' : target.value.slice(start, end));
                 }}
                 readOnly={isEditorLocked}
                 value={draftContent}

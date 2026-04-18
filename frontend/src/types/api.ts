@@ -80,6 +80,7 @@ export interface UpdateDocumentRequest {
 export interface AiSuggestRequest {
   prompt: string;
   context?: string;
+  context_text?: string;
 }
 
 export interface AiSuggestResponse {

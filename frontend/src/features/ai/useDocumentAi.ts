@@ -6,7 +6,7 @@ export type AiContextScope = 'selection' | 'section' | 'document';
 
 const DEFAULT_CONTEXT: AiContextScope = 'document';
 
-export function useDocumentAi(documentId: string | null) {
+export function useDocumentAi(documentId: string | null, selectionText: string) {
   const [prompt, setPrompt] = useState('');
   const [context, setContext] = useState<AiContextScope>(DEFAULT_CONTEXT);
   const [promptError, setPromptError] = useState<string | null>(null);
@@ -31,6 +31,12 @@ export function useDocumentAi(documentId: string | null) {
     setHistoryError(null);
     setIsLoadingHistory(false);
   }, [documentId]);
+
+  useEffect(() => {
+    if (!selectionText && context === 'selection') {
+      setContext(DEFAULT_CONTEXT);
+    }
+  }, [selectionText, context]);
 
   useEffect(() => {
     if (!documentId) {
@@ -95,9 +101,16 @@ export function useDocumentAi(documentId: string | null) {
     setIsSuggesting(true);
 
     try {
-      const response = await api.ai.suggest(documentId, {
+      const body = {
         prompt: nextPrompt,
         context,
+        ...(context === 'selection' && selectionText
+          ? { context_text: selectionText }
+          : {}),
+      };
+
+      const response = await api.ai.suggest(documentId, {
+        ...body,
       });
 
       setSuggestion(response.suggestion);

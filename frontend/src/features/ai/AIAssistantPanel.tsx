@@ -27,6 +27,7 @@ const contextOptions: Array<{ value: AiContextScope; label: string; hint: string
 interface AIAssistantPanelProps {
   canInvoke: boolean;
   canApplySuggestion: boolean;
+  hasSelectionContext: boolean;
   prompt: string;
   promptError: string | null;
   context: AiContextScope;
@@ -50,6 +51,7 @@ interface AIAssistantPanelProps {
 export function AIAssistantPanel({
   canInvoke,
   canApplySuggestion,
+  hasSelectionContext,
   prompt,
   promptError,
   context,
@@ -71,6 +73,10 @@ export function AIAssistantPanel({
 }: AIAssistantPanelProps) {
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const containerClassName = embedded ? '' : 'shell-card rounded-[32px] p-5';
+  const contextHint =
+    context === 'selection' && !hasSelectionContext
+      ? 'Select text in the editor to enable selection context.'
+      : contextOptions.find((option) => option.value === context)?.hint;
 
   useEffect(() => {
     setCopyMessage(null);
@@ -130,13 +136,17 @@ export function AIAssistantPanel({
           />
 
           <SelectField
-            hint={contextOptions.find((option) => option.value === context)?.hint}
+            hint={contextHint}
             label="Context scope"
             onChange={(event) => onContextChange(event.target.value as AiContextScope)}
             value={context}
           >
             {contextOptions.map((option) => (
-              <option key={option.value} value={option.value}>
+              <option
+                disabled={option.value === 'selection' && !hasSelectionContext}
+                key={option.value}
+                value={option.value}
+              >
                 {option.label}
               </option>
             ))}
