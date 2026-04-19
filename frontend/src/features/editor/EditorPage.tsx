@@ -4,15 +4,17 @@ import { useAuth } from '../../app/AuthProvider';
 import { AppShell } from '../../components/AppShell';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
-import { InputField, SelectField, TextareaField } from '../../components/Field';
+import { InputField, SelectField } from '../../components/Field';
 import { StatusBanner } from '../../components/StatusBanner';
 import { AIAssistantPanel } from '../ai/AIAssistantPanel';
 import { useDocumentAi } from '../ai/useDocumentAi';
-import { CollaborationReadinessPanel } from './CollaborationReadinessPanel';
+import { CollaborationPanel } from './CollaborationPanel';
+import { CollaborativeEditorAdapter } from './CollaborativeEditorAdapter';
 import { api, ApiError } from '../../services/api';
 import type {
   ApiCollaborator,
   ApiDocument,
+  ApiShareLink,
   ApiVersion,
 } from '../../types/api';
 import {
@@ -22,19 +24,25 @@ import {
   formatRelativeTimestamp,
 } from '../../utils/format';
 import { useCollaborationSession } from './useCollaborationSession';
+import { richTextToPlainText } from './richText';
+import { useCollaborativeEditor } from './useCollaborativeEditor';
 import { useUnsavedChangesPrompt } from './useUnsavedChangesPrompt';
 
 type EditorLoadState = 'loading' | 'ready' | 'forbidden' | 'notFound' | 'error';
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type SaveState = 'idle' | 'queued' | 'saving' | 'saved' | 'error';
 type AccessRole = 'owner' | 'editor' | 'viewer';
 type ShareRole = 'viewer' | 'editor';
 type EditorSidebarTab = 'access' | 'history' | 'assistant' | 'collaboration';
 
-const sidebarTabs: Array<{ id: EditorSidebarTab; label: string }> = [
-  { id: 'access', label: 'Access' },
-  { id: 'history', label: 'History' },
-  { id: 'assistant', label: 'Assistant' },
-  { id: 'collaboration', label: 'Collab' },
+const sidebarTabs: Array<{
+  id: EditorSidebarTab;
+  label: string;
+  description: string;
+}> = [
+  { id: 'access', label: 'Access', description: 'People and shared links' },
+  { id: 'history', label: 'History', description: 'Versions and restores' },
+  { id: 'assistant', label: 'Assistant', description: 'AI drafting and review' },
+  { id: 'collaboration', label: 'Collab', description: 'Presence and session state' },
 ];
 
 function sortCollaborators(collaborators: ApiCollaborator[]) {
@@ -60,7 +68,7 @@ function PermissionPill({ role }: { role: AccessRole }) {
   return (
     <span
       className={[
-        'rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
+        'inline-flex h-8 items-center justify-center rounded-full border px-4 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
         classes,
       ].join(' ')}
     >
@@ -87,18 +95,18 @@ function SaveStatePill({
   } else if (saveState === 'saving') {
     className = 'border-teal-200 bg-teal-50 text-teal-950';
     label = 'Saving';
+  } else if (saveState === 'queued' || isDirty) {
+    className = 'border-[color:var(--border-strong)] bg-[color:var(--teal-soft)] text-teal-900';
+    label = 'Pending save';
   } else if (saveState === 'error') {
     className = 'border-red-200 bg-red-50 text-red-700';
     label = 'Save failed';
-  } else if (isDirty) {
-    className = 'border-[color:var(--border-strong)] bg-[color:var(--teal-soft)] text-teal-900';
-    label = 'Unsaved';
   }
 
   return (
     <span
       className={[
-        'rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
+        'inline-flex h-8 items-center justify-center rounded-full border px-4 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
         className,
       ].join(' ')}
     >
@@ -126,12 +134,7 @@ function ToolTabButton({
 }) {
   return (
     <button
-      className={[
-        'rounded-[20px] border px-3 py-2.5 text-sm font-semibold transition',
-        isActive
-          ? 'border-[color:var(--border-strong)] bg-[color:var(--teal-soft)] text-teal-950 shadow-[0_10px_24px_rgba(15,118,110,0.08)]'
-          : 'border-[color:var(--border)] bg-white/75 text-[color:var(--text-soft)] hover:bg-white hover:text-[color:var(--text)]',
-      ].join(' ')}
+      className={`workspace-tool-pill${isActive ? ' is-active' : ''}`}
       onClick={onClick}
       type="button"
     >
@@ -146,9 +149,13 @@ function VersionHistoryPanel({
   isLoading,
   error,
   copyMessage,
+  restoreMessage,
+  canRestore,
+  restoringVersionId,
   onRetry,
   onSelectVersion,
   onCopySnapshot,
+  onRestoreVersion,
   embedded = false,
 }: {
   versions: ApiVersion[];
@@ -156,14 +163,21 @@ function VersionHistoryPanel({
   isLoading: boolean;
   error: string | null;
   copyMessage: string | null;
+  restoreMessage: string | null;
+  canRestore: boolean;
+  restoringVersionId: number | null;
   onRetry: () => void;
   onSelectVersion: (versionId: number) => void;
   onCopySnapshot: (version: ApiVersion) => void;
+  onRestoreVersion: (versionId: number) => void;
   embedded?: boolean;
 }) {
   const activeVersion =
     versions.find((version) => version.id === selectedVersionId) ?? versions[0] ?? null;
   const containerClassName = embedded ? '' : 'shell-card rounded-[32px] p-5';
+  const versionListClassName = embedded
+    ? 'max-h-56 space-y-3 overflow-y-auto pr-1'
+    : 'max-h-72 space-y-3 overflow-y-auto pr-1';
 
   return (
     <section className={containerClassName}>
@@ -196,7 +210,7 @@ function VersionHistoryPanel({
         </div>
       ) : (
         <div className="mt-5 space-y-4">
-          <div className="space-y-3">
+          <div className={versionListClassName}>
             {versions.map((version) => (
               <button
                 key={version.id}
@@ -246,9 +260,25 @@ function VersionHistoryPanel({
                 <p className="mt-3 text-sm text-emerald-700">{copyMessage}</p>
               ) : null}
 
+              {restoreMessage ? (
+                <p className="mt-3 text-sm text-emerald-700">{restoreMessage}</p>
+              ) : null}
+
               <div className="editor-copy mt-4 max-h-64 overflow-auto rounded-[22px] border border-[color:var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(249,247,241,0.98))] px-4 py-4 text-[15px] leading-7 whitespace-pre-wrap text-[color:var(--text)]">
-                {activeVersion.content?.trim() || 'This snapshot is empty.'}
+                {richTextToPlainText(activeVersion.content) || 'This snapshot is empty.'}
               </div>
+
+              {canRestore ? (
+                <div className="mt-4">
+                  <Button
+                    disabled={restoringVersionId === activeVersion.id}
+                    onClick={() => onRestoreVersion(activeVersion.id)}
+                    variant="secondary"
+                  >
+                    {restoringVersionId === activeVersion.id ? 'Restoring...' : 'Restore version'}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -271,16 +301,20 @@ export function EditorPage() {
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [versionsReloadKey, setVersionsReloadKey] = useState(0);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [restoringVersionId, setRestoringVersionId] = useState<number | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
-  const [draftContent, setDraftContent] = useState('');
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [shareEmail, setShareEmail] = useState('');
+  const [shareIdentifier, setShareIdentifier] = useState('');
   const [shareRole, setShareRole] = useState<ShareRole>('viewer');
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [revokingUserId, setRevokingUserId] = useState<number | null>(null);
+  const [shareLinks, setShareLinks] = useState<ApiShareLink[]>([]);
+  const [isLoadingShareLinks, setIsLoadingShareLinks] = useState(false);
+  const [shareLinkRole, setShareLinkRole] = useState<ShareRole>('viewer');
+  const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
+  const [revokingShareLinkId, setRevokingShareLinkId] = useState<number | null>(null);
   const [activeSidebarTab, setActiveSidebarTab] =
     useState<EditorSidebarTab>('access');
 
@@ -298,9 +332,11 @@ export function EditorPage() {
     setVersions([]);
     setSelectedVersionId(null);
     setCollaborators([]);
+    setShareLinks([]);
     setShareError(null);
     setShareMessage(null);
     setCopyMessage(null);
+    setRestoreMessage(null);
 
     api.documents
       .get(id)
@@ -312,10 +348,7 @@ export function EditorPage() {
         setDocument(response.document);
         setCollaborators(sortCollaborators(response.collaborators));
         setDraftTitle(response.document.title);
-        setDraftContent(response.document.content);
         setLoadState('ready');
-        setSaveState('idle');
-        setSaveError(null);
       })
       .catch((error) => {
         if (!alive) {
@@ -404,6 +437,48 @@ export function EditorPage() {
     };
   }, [document, versionsReloadKey]);
 
+  useEffect(() => {
+    if (!document || !user || document.owner_id !== user.id) {
+      setShareLinks([]);
+      return;
+    }
+
+    let alive = true;
+    setIsLoadingShareLinks(true);
+
+    api.shareLinks
+      .list(String(document.id))
+      .then((response) => {
+        if (!alive) {
+          return;
+        }
+
+        setShareLinks(response.share_links);
+      })
+      .catch((error) => {
+        if (!alive) {
+          return;
+        }
+
+        if (error instanceof ApiError && error.status === 401) {
+          return;
+        }
+
+        setShareError(
+          error instanceof ApiError ? error.error : 'Could not load active share links.',
+        );
+      })
+      .finally(() => {
+        if (alive) {
+          setIsLoadingShareLinks(false);
+        }
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [document, user]);
+
   let permission: AccessRole = 'viewer';
 
   if (user && document) {
@@ -419,14 +494,36 @@ export function EditorPage() {
 
   const canEdit = permission === 'owner' || permission === 'editor';
   const canInvokeAi = permission === 'owner' || permission === 'editor';
-  const isEditorLocked = !canEdit || saveState === 'saving';
-  const isDirty = document
-    ? draftTitle !== document.title || draftContent !== document.content
-    : false;
-  const wordCount = countWords(draftContent);
-  const characterCount = draftContent.length;
-  const ai = useDocumentAi(document ? String(document.id) : null);
   const collaborationSession = useCollaborationSession(document ? String(document.id) : null);
+  const collaborativeEditor = useCollaborativeEditor({
+    documentId: document ? String(document.id) : null,
+    document,
+    session: collaborationSession.session,
+    title: draftTitle,
+    canEdit,
+    currentUser: user,
+    onPersisted: (nextDocument) => {
+      setDocument(nextDocument);
+      setDraftTitle(nextDocument.title);
+      setVersionsReloadKey((current) => current + 1);
+    },
+  });
+  const ai = useDocumentAi(
+    document ? String(document.id) : null,
+    collaborativeEditor.selectionText,
+    collaborativeEditor.plainText,
+  );
+  const isDirty = collaborativeEditor.isDirty;
+  const wordCount = countWords(collaborativeEditor.plainText);
+  const characterCount = collaborativeEditor.plainText.length;
+  const isSavingNow = collaborativeEditor.saveState === 'saving';
+  const saveButtonVariant = canEdit && isDirty ? 'primary' : isSavingNow ? 'secondary' : 'ghost';
+  const saveButtonClassName = [
+    'h-8 min-h-0 px-4 py-1 !text-xs font-semibold leading-none uppercase tracking-[0.18em]',
+    canEdit && isDirty
+      ? '!text-white'
+      : 'border-[color:var(--border)] bg-white/75 text-[color:var(--text-soft)] shadow-none hover:shadow-none disabled:!opacity-100',
+  ].join(' ');
 
   useUnsavedChangesPrompt(canEdit && isDirty);
 
@@ -444,14 +541,14 @@ export function EditorPage() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canEdit, isDirty, id, document, draftTitle, draftContent]);
+  }, [canEdit, isDirty, collaborativeEditor, draftTitle]);
 
   function resetTransientMessages() {
-    setSaveState('idle');
-    setSaveError(null);
+    collaborativeEditor.clearTransientSaveState();
     setShareError(null);
     setShareMessage(null);
     setCopyMessage(null);
+    setRestoreMessage(null);
   }
 
   async function handleSave() {
@@ -459,27 +556,7 @@ export function EditorPage() {
       return;
     }
 
-    setSaveState('saving');
-    setSaveError(null);
-
-    try {
-      const response = await api.documents.update(id, {
-        title: draftTitle,
-        content: draftContent,
-      });
-
-      setDocument(response.document);
-      setDraftTitle(response.document.title);
-      setDraftContent(response.document.content);
-      setSaveState('saved');
-    } catch (error) {
-      setSaveState('error');
-      if (error instanceof ApiError) {
-        setSaveError(error.error);
-      } else {
-        setSaveError('Could not save your changes.');
-      }
-    }
+    await collaborativeEditor.persistSnapshot();
   }
 
   async function handleShare() {
@@ -493,7 +570,7 @@ export function EditorPage() {
 
     try {
       const response = await api.documents.share(id, {
-        email: shareEmail.trim(),
+        identifier: shareIdentifier.trim(),
         role: shareRole,
       });
 
@@ -507,7 +584,7 @@ export function EditorPage() {
           },
         ]);
       });
-      setShareEmail('');
+      setShareIdentifier('');
       setShareRole('viewer');
       setShareMessage('Access updated successfully.');
     } catch (error) {
@@ -518,6 +595,64 @@ export function EditorPage() {
       }
     } finally {
       setIsSharing(false);
+    }
+  }
+
+  async function handleCreateShareLink() {
+    if (!id || permission !== 'owner') {
+      return;
+    }
+
+    setIsCreatingShareLink(true);
+    setShareError(null);
+    setShareMessage(null);
+
+    try {
+      const response = await api.shareLinks.create(id, { role: shareLinkRole });
+      setShareLinks((current) => [response.share_link, ...current.filter((entry) => entry.id !== response.share_link.id)]);
+      await navigator.clipboard.writeText(response.share_link.url);
+      setShareMessage('Share link created and copied to your clipboard.');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setShareError(error.error);
+      } else {
+        setShareError('Could not create a share link right now.');
+      }
+    } finally {
+      setIsCreatingShareLink(false);
+    }
+  }
+
+  async function handleCopyShareLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareMessage('Share link copied to your clipboard.');
+    } catch {
+      setShareError('Clipboard access is unavailable in this browser.');
+    }
+  }
+
+  async function handleRevokeShareLink(linkId: number) {
+    if (!id || permission !== 'owner') {
+      return;
+    }
+
+    setRevokingShareLinkId(linkId);
+    setShareError(null);
+    setShareMessage(null);
+
+    try {
+      await api.shareLinks.revoke(id, linkId);
+      setShareLinks((current) => current.filter((entry) => entry.id !== linkId));
+      setShareMessage('Share link revoked successfully.');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setShareError(error.error);
+      } else {
+        setShareError('Could not revoke that share link.');
+      }
+    } finally {
+      setRevokingShareLinkId(null);
     }
   }
 
@@ -546,16 +681,43 @@ export function EditorPage() {
   }
 
   async function handleCopySnapshot(version: ApiVersion) {
-    if (!version.content) {
+    const plainText = richTextToPlainText(version.content);
+    if (!plainText) {
       setCopyMessage('There is no snapshot text to copy.');
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(version.content);
+      await navigator.clipboard.writeText(plainText);
       setCopyMessage('Snapshot copied.');
     } catch {
       setCopyMessage('Clipboard access is unavailable in this browser.');
+    }
+  }
+
+  async function handleRestoreVersion(versionId: number) {
+    if (!id || !document || !canEdit) {
+      return;
+    }
+
+    setRestoringVersionId(versionId);
+    setVersionsError(null);
+    setCopyMessage(null);
+    setRestoreMessage(null);
+
+    try {
+      const response = await api.documents.restoreVersion(id, versionId);
+      collaborativeEditor.applyServerDocument(response.document);
+      setDocument(response.document);
+      setDraftTitle(response.document.title);
+      setVersionsReloadKey((current) => current + 1);
+      setRestoreMessage('Version restored into the current draft.');
+    } catch (error) {
+      setVersionsError(
+        error instanceof ApiError ? error.error : 'Could not restore that version.',
+      );
+    } finally {
+      setRestoringVersionId(null);
     }
   }
 
@@ -583,32 +745,108 @@ export function EditorPage() {
         ) : null}
 
         {permission === 'owner' ? (
-          <form
-            className="space-y-4 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleShare();
-            }}
-          >
-            <InputField
-              label="Invite by email"
-              onChange={(event) => setShareEmail(event.target.value)}
-              placeholder="teammate@example.com"
-              type="email"
-              value={shareEmail}
-            />
-            <SelectField
-              label="Access level"
-              onChange={(event) => setShareRole(event.target.value as ShareRole)}
-              value={shareRole}
+          <div className="space-y-4">
+            <form
+              className="space-y-4 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleShare();
+              }}
             >
-              <option value="viewer">Viewer</option>
-              <option value="editor">Editor</option>
-            </SelectField>
-            <Button disabled={isSharing} type="submit">
-              {isSharing ? 'Updating access...' : 'Invite or update access'}
-            </Button>
-          </form>
+              <InputField
+                label="Invite by email or username"
+                onChange={(event) => setShareIdentifier(event.target.value)}
+                placeholder="teammate@example.com or teammate"
+                value={shareIdentifier}
+              />
+              <SelectField
+                label="Access level"
+                onChange={(event) => setShareRole(event.target.value as ShareRole)}
+                value={shareRole}
+              >
+                <option value="viewer">Viewer</option>
+                <option value="editor">Editor</option>
+              </SelectField>
+              <Button disabled={isSharing} type="submit">
+                {isSharing ? 'Updating access...' : 'Invite or update access'}
+              </Button>
+            </form>
+
+            <div className="space-y-4 rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-[color:var(--text)]">Share by link</p>
+                <p className="text-sm leading-6 text-[color:var(--text-soft)]">
+                  Create a reusable viewer or editor link, then revoke it whenever the window closes.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <SelectField
+                  label="Link role"
+                  onChange={(event) => setShareLinkRole(event.target.value as ShareRole)}
+                  value={shareLinkRole}
+                >
+                  <option value="viewer">Viewer link</option>
+                  <option value="editor">Editor link</option>
+                </SelectField>
+                <div className="self-end">
+                  <Button disabled={isCreatingShareLink} onClick={() => void handleCreateShareLink()} type="button">
+                    {isCreatingShareLink ? 'Creating...' : 'Create link'}
+                  </Button>
+                </div>
+              </div>
+
+              {isLoadingShareLinks ? (
+                <div className="rounded-[20px] border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-4 py-4 text-sm text-[color:var(--text-soft)]">
+                  Loading active share links...
+                </div>
+              ) : shareLinks.length === 0 ? (
+                <div className="rounded-[20px] border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-4 py-4 text-sm text-[color:var(--text-soft)]">
+                  No active share links yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {shareLinks.map((shareLink) => (
+                    <div
+                      key={shareLink.id}
+                      className="rounded-[20px] border border-[color:var(--border)] bg-[color:var(--bg-strong)] px-4 py-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-[color:var(--text)]">
+                            {shareLink.role === 'editor' ? 'Editor link' : 'Viewer link'}
+                          </p>
+                          <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
+                            Created {formatRelativeTimestamp(shareLink.created_at)}
+                          </p>
+                          <p className="break-all text-sm text-[color:var(--text-soft)]">
+                            {shareLink.url}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            onClick={() => void handleCopyShareLink(shareLink.url)}
+                            type="button"
+                            variant="secondary"
+                          >
+                            Copy link
+                          </Button>
+                          <Button
+                            disabled={revokingShareLinkId === shareLink.id}
+                            onClick={() => void handleRevokeShareLink(shareLink.id)}
+                            type="button"
+                            variant="ghost"
+                          >
+                            {revokingShareLinkId === shareLink.id ? 'Revoking...' : 'Revoke'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 px-4 py-4 text-sm leading-6 text-[color:var(--text-soft)]">
             Access is managed by the document owner.
@@ -677,15 +915,19 @@ export function EditorPage() {
     if (activeSidebarTab === 'history') {
       return (
         <VersionHistoryPanel
+          canRestore={canEdit}
           copyMessage={copyMessage}
           embedded
           error={versionsError}
           isLoading={isLoadingVersions}
           onCopySnapshot={(version) => void handleCopySnapshot(version)}
+          onRestoreVersion={(versionId) => void handleRestoreVersion(versionId)}
           onRetry={() => {
             setVersionsReloadKey((current) => current + 1);
           }}
           onSelectVersion={setSelectedVersionId}
+          restoreMessage={restoreMessage}
+          restoringVersionId={restoringVersionId}
           selectedVersionId={selectedVersionId}
           versions={versions}
         />
@@ -695,53 +937,112 @@ export function EditorPage() {
     if (activeSidebarTab === 'assistant') {
       return (
         <AIAssistantPanel
-          canApplySuggestion={canEdit && saveState !== 'saving'}
+          canApplySuggestion={canEdit && collaborativeEditor.saveState !== 'saving'}
           canInvoke={canInvokeAi}
+          canUndoAiApply={collaborativeEditor.canUndoAiApply}
           context={ai.context}
           embedded
+          feature={ai.feature}
+          hasSelectionContext={ai.hasSelectionContext}
           history={ai.history}
           historyError={ai.historyError}
           isLoadingHistory={ai.isLoadingHistory}
           isSuggesting={ai.isSuggesting}
           lastPrompt={ai.lastPrompt}
+          lastModel={ai.lastModel}
+          onApplySelectedFragment={handleApplySuggestionFragment}
           onAppendSuggestion={handleAppendSuggestion}
+          onApplyAcceptedParts={handleApplyAcceptedSuggestion}
           onContextChange={ai.setContext}
+          onFeatureChange={ai.setFeature}
+          onCancel={ai.cancelSuggestion}
           onDismissSuggestion={ai.clearSuggestion}
           onPromptChange={ai.setPrompt}
+          onRejectSuggestion={handleRejectSuggestion}
           onReplaceDraft={handleReplaceWithSuggestion}
+          onReplaceSelection={handleReplaceSelectionWithSuggestion}
           onRetryHistory={ai.reloadHistory}
+          onSuggestionChange={ai.setSuggestion}
+          onSummaryFormatChange={ai.setSummaryFormat}
+          onSummaryLengthChange={ai.setSummaryLength}
           onSubmit={() => {
             void ai.submitSuggestion();
           }}
+          onToneChange={ai.setTone}
+          onUndoApply={collaborativeEditor.undoLastAiApply}
           prompt={ai.prompt}
           promptError={ai.promptError}
+          suggestionSourceText={ai.suggestionSourceText}
           suggestError={ai.suggestError}
           suggestion={ai.suggestion}
+          summaryFormat={ai.summaryFormat}
+          summaryLength={ai.summaryLength}
+          tone={ai.tone}
         />
       );
     }
 
     return (
-      <CollaborationReadinessPanel
+      <CollaborationPanel
         embedded
-        expiresIn={collaborationSession.expiresIn}
-        message={collaborationSession.message}
-        onRetry={collaborationSession.retry}
-        status={collaborationSession.status}
+        message={collaborativeEditor.connectionMessage ?? collaborationSession.message}
+        onRetrySession={collaborationSession.retry}
+        presenceUsers={collaborativeEditor.presenceUsers}
+        state={
+          collaborationSession.status === 'loading'
+            ? 'connecting'
+            : collaborationSession.status === 'unavailable'
+              ? 'error'
+              : collaborativeEditor.connectionState
+        }
       />
     );
   }
 
   function handleReplaceWithSuggestion(suggestion: string) {
     resetTransientMessages();
-    setDraftContent(suggestion);
+    collaborativeEditor.replaceWithSuggestion(suggestion);
+    void ai.recordDecision(ai.isSuggestionEdited ? 'edited' : 'accepted');
   }
 
   function handleAppendSuggestion(suggestion: string) {
     resetTransientMessages();
-    setDraftContent((current) =>
-      current.trim().length > 0 ? `${current.trimEnd()}\n\n${suggestion}` : suggestion,
-    );
+    collaborativeEditor.appendSuggestion(suggestion);
+    void ai.recordDecision(ai.isSuggestionEdited ? 'edited' : 'accepted');
+  }
+
+  function handleReplaceSelectionWithSuggestion(suggestion: string) {
+    resetTransientMessages();
+    collaborativeEditor.replaceSelectionWithSuggestion(suggestion);
+    void ai.recordDecision(ai.isSuggestionEdited ? 'edited' : 'accepted');
+  }
+
+  function handleApplySuggestionFragment(fragment: string) {
+    resetTransientMessages();
+    collaborativeEditor.replaceSelectionWithSuggestion(fragment);
+    void ai.recordDecision('partial');
+  }
+
+  function handleApplyAcceptedSuggestion(
+    suggestion: string,
+    mode: 'replace-selection' | 'replace-draft' | 'append',
+  ) {
+    resetTransientMessages();
+
+    if (mode === 'replace-selection') {
+      collaborativeEditor.replaceSelectionWithSuggestion(suggestion);
+    } else if (mode === 'replace-draft') {
+      collaborativeEditor.replaceWithSuggestion(suggestion);
+    } else {
+      collaborativeEditor.appendSuggestion(suggestion);
+    }
+
+    void ai.recordDecision('partial');
+  }
+
+  function handleRejectSuggestion() {
+    void ai.recordDecision('rejected');
+    ai.clearSuggestion();
   }
 
   if (loadState === 'loading') {
@@ -832,29 +1133,39 @@ export function EditorPage() {
 
   return (
     <AppShell
-      actions={
+      hidePageIntro
+      topBarActions={
         <>
           <Link
-            className="inline-flex items-center justify-center rounded-full border border-[color:var(--border)] bg-white/70 px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] transition hover:bg-white"
+            className="inline-flex h-8 items-center justify-center rounded-full bg-teal-900 px-4 py-1 text-xs font-semibold uppercase tracking-[0.16em] !text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)] transition hover:bg-teal-950 hover:!text-white hover:shadow-[0_14px_28px_rgba(15,118,110,0.22)]"
             to="/documents"
           >
-            Back to documents
+            Documents
           </Link>
-          <SaveStatePill canEdit={canEdit} isDirty={isDirty} saveState={saveState} />
+          <SaveStatePill
+            canEdit={canEdit}
+            isDirty={isDirty}
+            saveState={collaborativeEditor.saveState}
+          />
           <PermissionPill role={permission} />
-          <Button onClick={() => void handleSave()} disabled={!canEdit || !isDirty || saveState === 'saving'}>
-            {saveState === 'saving'
+          <Button
+            className={saveButtonClassName}
+            disabled={!canEdit || !isDirty || isSavingNow}
+            onClick={() => void handleSave()}
+            variant={saveButtonVariant}
+          >
+            {isSavingNow
               ? 'Saving...'
               : canEdit
                 ? isDirty
-                  ? 'Save changes'
+                  ? 'Save now'
                   : 'Saved'
                 : 'Read only'}
           </Button>
         </>
       }
       eyebrow="Document"
-      subtitle="Write in a focused plain-text workspace, manage access, and review earlier saved states."
+      subtitle="Collaborate in a shared editor, manage access, and review earlier saved states."
       title={draftTitle || 'Untitled'}
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
@@ -866,8 +1177,25 @@ export function EditorPage() {
             </StatusBanner>
           ) : null}
 
-          {saveState === 'error' && saveError ? (
-            <StatusBanner title={saveError} tone="danger" />
+          {collaborativeEditor.connectionState === 'reconnecting' ? (
+            <StatusBanner
+              title="The collaboration session is reconnecting."
+              tone="warning"
+            >
+              Live updates will resume automatically when the socket reconnects.
+            </StatusBanner>
+          ) : null}
+
+          {collaborativeEditor.connectionState === 'error' && collaborativeEditor.connectionMessage ? (
+            <StatusBanner title={collaborativeEditor.connectionMessage} tone="danger" />
+          ) : null}
+
+          {collaborativeEditor.saveState === 'error' && collaborativeEditor.saveError ? (
+            <StatusBanner title={collaborativeEditor.saveError} tone="danger" />
+          ) : null}
+
+          {collaborativeEditor.saveState === 'queued' && collaborativeEditor.saveMessage ? (
+            <StatusBanner title={collaborativeEditor.saveMessage} tone="warning" />
           ) : null}
 
           <section className="shell-card-strong rounded-[32px] p-5 sm:p-6">
@@ -876,7 +1204,9 @@ export function EditorPage() {
               <MetaChip>{`Updated ${formatRelativeTimestamp(document.updated_at)}`}</MetaChip>
               <MetaChip>{formatCount(wordCount, 'word')}</MetaChip>
               <MetaChip>{formatCount(characterCount, 'character')}</MetaChip>
-              {canEdit ? <MetaChip>{'Ctrl/Cmd + S to save'}</MetaChip> : null}
+              <MetaChip>{`Session ${collaborativeEditor.connectionState}`}</MetaChip>
+              {canEdit ? <MetaChip>{'Autosave is on'}</MetaChip> : null}
+              {canEdit ? <MetaChip>{'Ctrl/Cmd + S saves now'}</MetaChip> : null}
             </div>
 
             <div className="space-y-5">
@@ -891,24 +1221,14 @@ export function EditorPage() {
                   resetTransientMessages();
                   setDraftTitle(event.target.value);
                 }}
-                readOnly={isEditorLocked}
+                readOnly={!canEdit || collaborativeEditor.saveState === 'saving'}
                 value={draftTitle}
               />
 
-              <TextareaField
-                className="editor-copy min-h-[32rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,247,241,0.98))] text-[17px] leading-8"
-                hint={
-                  canEdit
-                    ? 'Your changes stay local until you save them.'
-                    : 'The latest saved content is shown below.'
-                }
-                label="Content"
-                onChange={(event) => {
-                  resetTransientMessages();
-                  setDraftContent(event.target.value);
-                }}
-                readOnly={isEditorLocked}
-                value={draftContent}
+              <CollaborativeEditorAdapter
+                editor={collaborativeEditor.editor}
+                hint="Live edits sync through the shared collaboration channel and autosave after a short pause. Save now whenever you want an immediate checkpoint."
+                readOnly={!canEdit}
               />
             </div>
           </section>
@@ -917,20 +1237,13 @@ export function EditorPage() {
         <aside className="self-start xl:sticky xl:top-6">
           <section className="shell-card rounded-[32px] p-4 sm:p-5">
             <div className="space-y-4">
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
                   Workspace tools
                 </p>
-                <h2 className="font-display text-3xl font-semibold tracking-tight text-[color:var(--text)]">
-                  Switch document context fast
-                </h2>
-                <p className="text-sm leading-6 text-[color:var(--text-soft)]">
-                  Move between access, history, assistant, and collaboration without chasing a
-                  long sidebar.
-                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="workspace-tool-grid">
                 {sidebarTabs.map((tab) => (
                   <ToolTabButton
                     key={tab.id}
@@ -941,7 +1254,7 @@ export function EditorPage() {
                 ))}
               </div>
 
-              <div className="xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
+              <div className="workspace-tool-panel xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
                 {renderSidebarPanel()}
               </div>
             </div>

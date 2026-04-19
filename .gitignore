@@ -1,5 +1,8 @@
 # Dependencies
 node_modules/
+.venv/
+.pytest_cache/
+**/.venv/
 
 # Environment secrets — never commit these
 .env
@@ -8,6 +11,7 @@ node_modules/
 # Runtime data
 data/
 **/data/
+backend/tests/.test-editor.db
 
 # macOS
 .DS_Store
@@ -18,3 +22,9 @@ data/
 .idea/
 *.swp
 .claude/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.egg-info/
+frontend/test-results/
+frontend/playwright-report/

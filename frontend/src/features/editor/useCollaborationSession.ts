@@ -1,26 +1,20 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../services/api';
+import type { DocumentSessionResponse } from '../../types/api';
 
-export type CollaborationReadinessState =
-  | 'idle'
-  | 'loading'
-  | 'ready'
-  | 'comingSoon'
-  | 'unavailable';
-
-const STUB_SESSION_TOKEN = '[stub] collab-server not yet implemented';
+export type CollaborationSessionState = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 export function useCollaborationSession(documentId: string | null) {
-  const [status, setStatus] = useState<CollaborationReadinessState>('idle');
+  const [status, setStatus] = useState<CollaborationSessionState>('idle');
   const [message, setMessage] = useState<string | null>(null);
-  const [expiresIn, setExpiresIn] = useState<number | null>(null);
+  const [session, setSession] = useState<DocumentSessionResponse | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!documentId) {
       setStatus('idle');
       setMessage(null);
-      setExpiresIn(null);
+      setSession(null);
       return;
     }
 
@@ -36,34 +30,25 @@ export function useCollaborationSession(documentId: string | null) {
           return;
         }
 
-        setExpiresIn(response.expiresIn);
-
-        if (response.sessionToken === STUB_SESSION_TOKEN) {
-          setStatus('comingSoon');
-          setMessage('Live shared editing is not active yet for this workspace.');
-          return;
-        }
-
+        setSession(response);
         setStatus('ready');
-        setMessage('Collaboration session is ready for this document.');
       })
       .catch((error) => {
         if (!alive) {
           return;
         }
 
+        setSession(null);
+        setStatus('unavailable');
         if (error instanceof ApiError && error.status === 401) {
-          setStatus('unavailable');
-          setExpiresIn(null);
           setMessage('Your session expired. Please sign in again.');
           return;
         }
 
-        setStatus('unavailable');
         setMessage(
           error instanceof ApiError
             ? error.error
-            : 'Could not prepare collaboration readiness.',
+            : 'Could not prepare a collaboration session for this document.',
         );
       });
 
@@ -79,7 +64,7 @@ export function useCollaborationSession(documentId: string | null) {
   return {
     status,
     message,
-    expiresIn,
+    session,
     retry,
   };
 }
