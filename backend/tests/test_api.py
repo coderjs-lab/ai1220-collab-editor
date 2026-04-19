@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
+from starlette.websockets import WebSocketDisconnect
+from ypy_websocket.yutils import YMessageType
 
 
 def load_app(tmp_path: Path):
@@ -343,3 +346,65 @@ def test_collaboration_session_and_websocket_handshake(tmp_path: Path):
             f"/ws/collab/{document_id}?token={session['session_token']}"
         ) as websocket:
             assert websocket is not None
+
+
+def test_collaboration_websocket_rejects_invalid_token(tmp_path: Path):
+    app = load_app(tmp_path)
+
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as error:
+            with client.websocket_connect("/ws/collab/1?token=invalid-token"):
+                pass
+
+        assert error.value.code == 1008
+
+
+def test_collaboration_websocket_relays_basic_awareness_messages(tmp_path: Path):
+    app = load_app(tmp_path)
+
+    with TestClient(app) as client:
+        owner = register_user(client, username="owner", email="owner@example.com")
+        guest = register_user(client, username="guest", email="guest@example.com")
+
+        document_id = client.post(
+            "/api/documents",
+            json={"title": "Realtime Demo", "content": sample_content("Hello")},
+            headers=auth_headers(owner["token"]),
+        ).json()["document"]["id"]
+
+        share_response = client.post(
+            f"/api/documents/{document_id}/share",
+            headers=auth_headers(owner["token"]),
+            json={"identifier": "guest@example.com", "role": "editor"},
+        )
+        assert share_response.status_code == 201, share_response.text
+
+        owner_session = client.post(
+            f"/api/documents/{document_id}/session",
+            headers=auth_headers(owner["token"]),
+        ).json()
+        guest_session = client.post(
+            f"/api/documents/{document_id}/session",
+            headers=auth_headers(guest["token"]),
+        ).json()
+
+        with client.websocket_connect(
+            f"/ws/collab/{document_id}?token={owner_session['session_token']}"
+        ) as owner_ws, client.websocket_connect(
+            f"/ws/collab/{document_id}?token={guest_session['session_token']}"
+        ) as guest_ws:
+            # Flush the initial sync packet each client receives on connect.
+            owner_ws.receive_bytes()
+            guest_ws.receive_bytes()
+
+            awareness_message = bytes([int(YMessageType.AWARENESS), 1, 9, 8, 7])
+            owner_ws.send_bytes(awareness_message)
+
+            received = None
+            for _ in range(3):
+                candidate = guest_ws.receive_bytes()
+                if candidate == awareness_message:
+                    received = candidate
+                    break
+
+            assert received == awareness_message

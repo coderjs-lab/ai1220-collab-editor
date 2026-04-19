@@ -178,7 +178,6 @@ class CollaborationServer(WebsocketServer):
 
     async def _serve(self, websocket: CollaborationSocket, tg):
         room = await self.get_room(websocket.path)
-        await self.start_room(room)
         await room.serve(websocket)
 
         if self.auto_clean_rooms and not room.clients:

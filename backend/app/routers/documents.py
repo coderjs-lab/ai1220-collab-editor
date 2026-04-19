@@ -17,12 +17,23 @@ from ..schemas import (
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
-@router.get("", response_model=DocumentListResponse)
+@router.get(
+    "",
+    response_model=DocumentListResponse,
+    summary="List accessible documents",
+    description="Returns every document owned by the caller or shared with them, ordered by most recently updated.",
+)
 def list_documents(current_user=Depends(get_current_user), connection=Depends(get_connection)):
     return {"documents": repository.list_documents_for_user(connection, current_user["id"])}
 
 
-@router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a document",
+    description="Creates a new document owned by the authenticated user. Content defaults to an empty rich-text document.",
+)
 def create_document(
     payload: CreateDocumentRequest,
     current_user=Depends(get_current_user),
@@ -37,7 +48,12 @@ def create_document(
     return {"document": document}
 
 
-@router.get("/{document_id}", response_model=DocumentDetailResponse)
+@router.get(
+    "/{document_id}",
+    response_model=DocumentDetailResponse,
+    summary="Fetch a document and its collaborators",
+    description="Returns the document payload plus current collaborator records when the caller has access.",
+)
 def get_document(document_id: int, current_user=Depends(get_current_user), connection=Depends(get_connection)):
     document, role = repository.resolve_document_access(connection, document_id, current_user["id"])
     if document is None:
@@ -51,7 +67,12 @@ def get_document(document_id: int, current_user=Depends(get_current_user), conne
     }
 
 
-@router.put("/{document_id}", response_model=DocumentResponse)
+@router.put(
+    "/{document_id}",
+    response_model=DocumentResponse,
+    summary="Update document title or content",
+    description="Updates a document for owners and editors. Content updates also participate in autosave and version checkpointing.",
+)
 def update_document(
     document_id: int,
     payload: UpdateDocumentRequest,
@@ -77,7 +98,12 @@ def update_document(
     return {"document": updated}
 
 
-@router.delete("/{document_id}", response_model=DeleteDocumentResponse)
+@router.delete(
+    "/{document_id}",
+    response_model=DeleteDocumentResponse,
+    summary="Delete a document",
+    description="Deletes a document and all related permissions, versions, share links, and AI history. Owner only.",
+)
 def delete_document(document_id: int, current_user=Depends(get_current_user), connection=Depends(get_connection)):
     document = repository.find_document(connection, document_id)
     if document is None:
@@ -89,7 +115,12 @@ def delete_document(document_id: int, current_user=Depends(get_current_user), co
     return {"message": "Document deleted"}
 
 
-@router.get("/{document_id}/versions", response_model=DocumentVersionsResponse)
+@router.get(
+    "/{document_id}/versions",
+    response_model=DocumentVersionsResponse,
+    summary="List document versions",
+    description="Returns saved version checkpoints for a document in reverse chronological order.",
+)
 def get_versions(document_id: int, current_user=Depends(get_current_user), connection=Depends(get_connection)):
     document, role = repository.resolve_document_access(connection, document_id, current_user["id"])
     if document is None:
@@ -100,7 +131,12 @@ def get_versions(document_id: int, current_user=Depends(get_current_user), conne
     return {"versions": repository.list_versions(connection, document_id)}
 
 
-@router.post("/{document_id}/versions/{version_id}/restore", response_model=DocumentResponse)
+@router.post(
+    "/{document_id}/versions/{version_id}/restore",
+    response_model=DocumentResponse,
+    summary="Restore a prior version",
+    description="Promotes a saved version to become the document's current content and records the restore action in history.",
+)
 def restore_version(
     document_id: int,
     version_id: int,

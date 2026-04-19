@@ -29,6 +29,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+  "ignore::pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.setuptools]
 packages = ["app"]

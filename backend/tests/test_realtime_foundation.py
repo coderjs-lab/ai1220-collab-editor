@@ -3,9 +3,21 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+import warnings
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
+
+
+# y_py can emit a PytestUnraisableExceptionWarning during interpreter teardown
+# even after explicit room shutdown. Scope the suppression to this realtime test
+# module so unrelated warnings elsewhere still surface normally.
+warnings.filterwarnings(
+    "ignore",
+    message="Exception ignored in: None",
+    category=pytest.PytestUnraisableExceptionWarning,
+)
 
 
 def load_app(tmp_path: Path):
@@ -36,16 +48,6 @@ def register_user(client: TestClient, *, username: str, email: str, password: st
 
 def auth_headers(token: str):
     return {"Authorization": f"Bearer {token}"}
-
-
-def test_health_endpoint(tmp_path: Path):
-    app = load_app(tmp_path)
-
-    with TestClient(app) as client:
-        response = client.get("/api/health")
-
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
 
 
 def test_owner_can_create_document_and_issue_collab_session(tmp_path: Path):

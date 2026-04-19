@@ -64,7 +64,13 @@ def _build_auth_response(connection, user: dict[str, object], *, status_code: in
     return response
 
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=AuthResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new user",
+    description="Creates a Draftboard account and immediately returns an access token plus refresh cookie session.",
+)
 def register(payload: RegisterRequest, connection=Depends(get_connection)):
     if repository.find_user_by_email(connection, payload.email) or repository.find_user_by_username(connection, payload.username):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username or email already taken")
@@ -83,7 +89,12 @@ def register(payload: RegisterRequest, connection=Depends(get_connection)):
     return _build_auth_response(connection, public_user, status_code=status.HTTP_201_CREATED)
 
 
-@router.post("/login", response_model=AuthResponse)
+@router.post(
+    "/login",
+    response_model=AuthResponse,
+    summary="Sign in with email and password",
+    description="Authenticates an existing user and rotates the refresh-cookie session used for silent re-authentication.",
+)
 def login(payload: LoginRequest, connection=Depends(get_connection)):
     user = repository.find_user_by_email(connection, payload.email)
     if user is None or not verify_password(payload.password, user["password_hash"]):
@@ -93,7 +104,12 @@ def login(payload: LoginRequest, connection=Depends(get_connection)):
     return _build_auth_response(connection, public_user)
 
 
-@router.post("/refresh", response_model=AuthResponse)
+@router.post(
+    "/refresh",
+    response_model=AuthResponse,
+    summary="Refresh the current session",
+    description="Uses the refresh cookie to mint a new short-lived access token and rotate the stored refresh token.",
+)
 def refresh_session(
     connection=Depends(get_connection),
     refresh_token: str | None = Cookie(default=None, alias=settings.refresh_cookie_name),
@@ -114,7 +130,12 @@ def refresh_session(
     return _build_auth_response(connection, public_user)
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post(
+    "/logout",
+    response_model=MessageResponse,
+    summary="Sign out",
+    description="Revokes the active refresh-cookie session and clears the browser cookie.",
+)
 def logout(
     connection=Depends(get_connection),
     refresh_token: str | None = Cookie(default=None, alias=settings.refresh_cookie_name),
@@ -127,6 +148,11 @@ def logout(
     return response
 
 
-@router.get("/me", response_model=MeResponse)
+@router.get(
+    "/me",
+    response_model=MeResponse,
+    summary="Get the current authenticated user",
+    description="Returns the public user profile for the access token currently attached to the request.",
+)
 def me(current_user=Depends(get_current_user)):
     return {"user": current_user}

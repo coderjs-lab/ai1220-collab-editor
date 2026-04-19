@@ -17,6 +17,17 @@ from .schemas import HealthResponse
 from .security import decode_token
 
 
+openapi_tags = [
+    {"name": "system", "description": "Operational endpoints used for health and environment checks."},
+    {"name": "auth", "description": "User registration, login, refresh, logout, and current-session lookup."},
+    {"name": "documents", "description": "Document listing, creation, retrieval, editing, deletion, and version restore."},
+    {"name": "sharing", "description": "Owner-managed direct document sharing and collaborator revocation."},
+    {"name": "share-links", "description": "Share-by-link creation, listing, revocation, and acceptance flows."},
+    {"name": "ai", "description": "AI suggestion generation, streaming, history lookup, and decision tracking."},
+    {"name": "collaboration", "description": "Document-scoped collaboration session bootstrap for authenticated websockets."},
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_database()
@@ -33,7 +44,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Draftboard Backend",
     version="0.2.0",
-    description="FastAPI collaboration foundation for Draftboard Assignment 2.",
+    description=(
+        "Draftboard Assignment 2 backend. Provides authenticated document CRUD, "
+        "sharing, version history, AI suggestion workflows, and realtime "
+        "collaboration session bootstrap for the React frontend."
+    ),
+    openapi_tags=openapi_tags,
     lifespan=lifespan,
 )
 
@@ -72,7 +88,13 @@ async def unhandled_exception_handler(_request, _exc: Exception):
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 
-@app.get("/api/health", response_model=HealthResponse, tags=["system"])
+@app.get(
+    "/api/health",
+    response_model=HealthResponse,
+    tags=["system"],
+    summary="Check backend health",
+    description="Returns a minimal status payload so local scripts and tests can verify that the API is running.",
+)
 def health():
     return {"status": "ok"}
 

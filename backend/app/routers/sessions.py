@@ -11,7 +11,12 @@ from ..security import create_collab_session_token
 router = APIRouter(prefix="/api/documents/{document_id}/session", tags=["collaboration"])
 
 
-@router.post("", response_model=DocumentSessionResponse)
+@router.post(
+    "",
+    response_model=DocumentSessionResponse,
+    summary="Issue a collaboration websocket session",
+    description="Returns a short-lived document-scoped token and websocket URL for realtime collaboration.",
+)
 def create_session(document_id: int, current_user=Depends(get_current_user), connection=Depends(get_connection)):
     document, role = repository.resolve_document_access(connection, document_id, current_user["id"])
     if document is None:

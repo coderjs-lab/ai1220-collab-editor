@@ -22,7 +22,12 @@ def _share_link_url(token: str) -> str:
     return f"{origin.rstrip('/')}/share/{token}"
 
 
-@router.get("/api/documents/{document_id}/share-links", response_model=DocumentShareLinksResponse)
+@router.get(
+    "/api/documents/{document_id}/share-links",
+    response_model=DocumentShareLinksResponse,
+    summary="List active share links",
+    description="Owner-only route that returns every non-revoked share link for the document.",
+)
 def list_document_share_links(
     document_id: int,
     current_user=Depends(get_current_user),
@@ -48,6 +53,8 @@ def list_document_share_links(
     "/api/documents/{document_id}/share-links",
     response_model=ShareLinkResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Create a share link",
+    description="Owner-only route that creates a new viewer/editor share link for the document.",
 )
 def create_document_share_link(
     document_id: int,
@@ -73,6 +80,8 @@ def create_document_share_link(
 @router.delete(
     "/api/documents/{document_id}/share-links/{link_id}",
     response_model=DeleteDocumentResponse,
+    summary="Revoke a share link",
+    description="Owner-only route that revokes an existing share link so it can no longer be accepted.",
 )
 def revoke_document_share_link(
     document_id: int,
@@ -90,7 +99,12 @@ def revoke_document_share_link(
     return {"message": "Share link revoked"}
 
 
-@router.post("/api/share-links/{token}/accept", response_model=AcceptShareLinkResponse)
+@router.post(
+    "/api/share-links/{token}/accept",
+    response_model=AcceptShareLinkResponse,
+    summary="Accept a share link",
+    description="Consumes a valid share token and grants the caller the linked document role.",
+)
 def accept_share_link(
     token: str,
     current_user=Depends(get_current_user),

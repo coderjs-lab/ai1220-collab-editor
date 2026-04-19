@@ -9,7 +9,13 @@ from ..schemas import DeleteDocumentResponse, ShareDocumentRequest, ShareDocumen
 router = APIRouter(prefix="/api/documents/{document_id}/share", tags=["sharing"])
 
 
-@router.post("", response_model=ShareDocumentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ShareDocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Share a document with a user",
+    description="Owner-only route that grants or updates viewer/editor access for a target user identified by username or email.",
+)
 def share_document(
     document_id: int,
     payload: ShareDocumentRequest,
@@ -33,7 +39,12 @@ def share_document(
     return {"permission": permission}
 
 
-@router.delete("/{user_id}", response_model=DeleteDocumentResponse)
+@router.delete(
+    "/{user_id}",
+    response_model=DeleteDocumentResponse,
+    summary="Revoke direct collaborator access",
+    description="Owner-only route that removes an existing direct collaborator permission from the document.",
+)
 def revoke_access(
     document_id: int,
     user_id: int,

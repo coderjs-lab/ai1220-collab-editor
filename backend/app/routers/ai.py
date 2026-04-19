@@ -35,7 +35,12 @@ def _resolve_editable_document(connection, document_id: int, user_id: int):
     return document
 
 
-@router.post("/suggest", response_model=AiSuggestResponse)
+@router.post(
+    "/suggest",
+    response_model=AiSuggestResponse,
+    summary="Generate an AI suggestion",
+    description="Runs a non-streaming AI request for the document and records the interaction in AI history.",
+)
 async def suggest(
     document_id: int,
     payload: AiSuggestRequest,
@@ -80,7 +85,29 @@ async def suggest(
     }
 
 
-@router.post("/suggest/stream")
+@router.post(
+    "/suggest/stream",
+    summary="Stream an AI suggestion",
+    description="Streams suggestion chunks as Server-Sent Events while recording the interaction for later review and decision tracking.",
+    response_description="Server-Sent Event stream carrying metadata, chunk, complete, or error events for the AI generation lifecycle.",
+    responses={
+        200: {
+            "description": "Streaming AI response delivered as Server-Sent Events.",
+            "content": {
+                "text/event-stream": {
+                    "example": (
+                        "event: metadata\n"
+                        'data: {"interaction_id":42,"feature":"summarize","model":"draftboard-stub-v1"}\n\n'
+                        "event: chunk\n"
+                        'data: {"delta":"Draftboard combines collaborative editing"}\n\n'
+                        "event: complete\n"
+                        'data: {"interaction_id":42,"status":"generated"}\n\n'
+                    )
+                }
+            },
+        }
+    },
+)
 async def suggest_stream(
     document_id: int,
     payload: AiSuggestRequest,
@@ -116,7 +143,12 @@ async def suggest_stream(
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@router.get("/history", response_model=AiHistoryResponse)
+@router.get(
+    "/history",
+    response_model=AiHistoryResponse,
+    summary="List AI interaction history",
+    description="Returns prior AI requests and decisions for the document, including prompt and context preview metadata.",
+)
 def history(document_id: int, current_user=Depends(get_current_user), connection=Depends(get_connection)):
     document, role = repository.resolve_document_access(connection, document_id, current_user["id"])
     if document is None:
@@ -127,7 +159,12 @@ def history(document_id: int, current_user=Depends(get_current_user), connection
     return {"history": repository.list_ai_history(connection, document_id)}
 
 
-@router.post("/history/{interaction_id}/decision", response_model=MessageResponse)
+@router.post(
+    "/history/{interaction_id}/decision",
+    response_model=MessageResponse,
+    summary="Record an AI review decision",
+    description="Marks an AI interaction as accepted, rejected, partially applied, or edited after human review.",
+)
 def update_decision(
     document_id: int,
     interaction_id: int,
