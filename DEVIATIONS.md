@@ -74,13 +74,25 @@ The point is traceability, not pretending the design never changed. Each deviati
 - **Why:** The assignment bonus path explicitly rewards link-based sharing with permission control and revocation.
 - **Outcome:** Improvement. This broadens the access model without replacing the simpler direct-invite flow.
 
-## 12. AI suggestions still lack partial acceptance and the final AI branch
+## 12. Planned Express plus sidecar AI service replaced with FastAPI-integrated provider abstraction
 
-- **Changed:** The integrated branch keeps AI compatibility routes and editor-side suggestion application, but the teammate-owned final AI workflow has not landed yet, and partial acceptance of suggestion fragments is not implemented.
-- **Why:** The AI branch is still pending final push / merge.
-- **Outcome:** Compromise. The collaboration/editor contract is preserved, but AI is not final on this branch.
+- **Changed:** The Assignment 1 direction and teammate AI branch both assumed an Express-facing AI route with a separate `ai-service`. The final integrated branch keeps AI inside the FastAPI backend and abstracts provider calls behind `backend/app/ai_provider.py`.
+- **Why:** The assignment constrains the backend to FastAPI, and keeping the assistant inside the existing auth/document backend avoids a second app boundary during integration.
+- **Outcome:** Improvement. The backend now satisfies the technology constraint directly, and provider swaps are isolated to one module.
 
-## 13. Browser end-to-end coverage now uses Playwright rather than remaining purely unit/integration level
+## 13. AI suggestions now stream through SSE with explicit decision tracking
+
+- **Changed:** Earlier branch states used blocking AI suggestion calls. The final integrated branch streams suggestion chunks with `text/event-stream`, supports cancellation, and records generated / accepted / edited / partial / rejected outcomes per interaction.
+- **Why:** Assignment 2 makes streaming non-negotiable and requires accept/reject history instead of fire-and-forget replacement.
+- **Outcome:** Improvement. The AI workflow is materially closer to a real editor and now matches the required UX contract.
+
+## 14. Partial suggestion acceptance is implemented through selected-fragment review rather than inline tracked changes
+
+- **Changed:** Instead of a tracked-changes diff model, the final branch lets users review pre-split suggestion parts and also highlight an exact substring inside the AI suggestion textarea, then accept / reject / reset that selected fragment before applying only the accepted output into the collaborative editor.
+- **Why:** This satisfies the partial-acceptance bonus path without colliding with the realtime editor architecture already built around Tiptap + Yjs.
+- **Outcome:** Mixed. Improvement because the bonus feature exists and works inside the shared editor path; compromise because the UI is simpler than a full tracked-changes model.
+
+## 15. Browser end-to-end coverage now uses Playwright rather than remaining purely unit/integration level
 
 - **Changed:** The branch now includes a Playwright E2E flow that exercises registration, document creation, share-by-link acceptance, realtime collaboration, and autosave persistence.
 - **Why:** The bonus path explicitly rewards end-to-end coverage across the real browser workflow instead of relying only on backend and component tests.

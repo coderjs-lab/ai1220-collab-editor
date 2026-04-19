@@ -4,8 +4,7 @@ Draftboard is the AI1220 collaborative document editor. This integration branch 
 
 - Luka's **core application** work for authentication, document management, sharing, rich-text editing, and version restore
 - Harman's **realtime collaboration** work for authenticated websocket sync, presence, and remote carets
-
-The **AI writing assistant branch is still pending final integration**, so AI behavior in this branch should be treated as compatibility-preserving rather than final.
+- the integrated **AI writing assistant** flow for streaming suggestions, comparison UX, and history tracking on top of the shared editor
 
 ## What This Branch Demonstrates
 
@@ -22,13 +21,17 @@ The **AI writing assistant branch is still pending final integration**, so AI be
 - collaborator presence, typing/activity state, and remote cursor / selection rendering
 - share-by-link creation, acceptance, and revocation
 - browser E2E coverage for the core + realtime flow with Playwright
+- streaming AI suggestions over FastAPI `text/event-stream`
+- AI actions for rewrite, summarize, expand, grammar fixes, and custom prompts
+- editable AI suggestion review with compare-before-apply, reject, partial apply, and undo-after-apply
+- prompt templates through a dedicated prompt module and provider abstraction
+- AI interaction history including source context, prompt, model, response, and decision status
 - explicit implementation notes in [DEVIATIONS.md](DEVIATIONS.md)
 
 ## What Is Not Final Yet
 
-- final AI assistant implementation from the teammate-owned AI branch
 - Redis-backed multi-instance collaboration fan-out
-- partial acceptance of AI suggestion fragments
+- a production LLM API key is optional; without one the app runs on the built-in streaming stub provider
 
 ## How To Run
 
@@ -70,6 +73,27 @@ Frontend env:
 VITE_API_BASE_URL=http://localhost:3001/api
 ```
 
+Backend AI env:
+
+```bash
+AI_PROVIDER=stub
+AI_MODEL=draftboard-stub-v1
+AI_MAX_OUTPUT_TOKENS=768
+# ANTHROPIC_API_KEY=...
+```
+
+`AI_PROVIDER=stub` works out of the box for local demos and tests. If you want a live Anthropic-backed provider, set `AI_PROVIDER=anthropic` and provide `ANTHROPIC_API_KEY`.
+
+## AI In Concurrent Collaboration
+
+Draftboard does **not** let the assistant overwrite the shared document automatically.
+
+- AI generation happens against a snapshot of the current editor selection / section / document context.
+- The streamed suggestion stays in the assistant panel until a human explicitly accepts, edits, partially accepts, or rejects it.
+- Any accepted AI output is applied through the same Tiptap + Yjs editor transaction path as normal user edits.
+- That means collaborator cursors, presence, autosave, history, and websocket sync all see the AI-applied change as a normal shared-editor mutation rather than a side-channel overwrite.
+- If the underlying document changes while a suggestion is streaming, the already-generated suggestion is still reviewable, but it is only merged into the current document when the user explicitly applies it.
+
 ## Backend API Surface
 
 All authenticated REST endpoints use:
@@ -108,12 +132,12 @@ All authenticated REST endpoints use:
 
 ### AI
 
-These routes remain available for compatibility with the not-yet-integrated AI branch:
-
 | Method | Path | Response |
 |--------|------|----------|
-| POST | `/api/documents/:id/ai/suggest` | `{ suggestion }` |
+| POST | `/api/documents/:id/ai/suggest` | `{ interaction_id, suggestion, model, status, feature, context_preview }` |
+| POST | `/api/documents/:id/ai/suggest/stream` | `text/event-stream` |
 | GET | `/api/documents/:id/ai/history` | `{ history[] }` |
+| POST | `/api/documents/:id/ai/history/:interactionId/decision` | `{ message }` |
 
 ### Collaboration
 

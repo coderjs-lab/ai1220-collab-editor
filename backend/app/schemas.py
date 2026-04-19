@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Role = Literal["owner", "editor", "viewer"]
 ShareRole = Literal["editor", "viewer"]
+AiFeature = Literal["rewrite", "summarize", "expand", "fix_grammar", "custom"]
+AiContextScope = Literal["selection", "section", "document"]
+AiDecisionStatus = Literal["accepted", "rejected", "partial", "edited"]
 
 
 class ApiBaseModel(BaseModel):
@@ -51,6 +54,11 @@ class ApiAiHistoryItem(ApiBaseModel):
     response: str | None
     created_at: str
     username: str
+    model: str | None = None
+    status: str | None = None
+    feature: AiFeature | None = None
+    context_scope: AiContextScope | None = None
+    context_preview: str | None = None
 
 
 class ApiShareLink(ApiBaseModel):
@@ -96,8 +104,23 @@ class ShareDocumentRequest(ApiBaseModel):
 
 
 class AiSuggestRequest(ApiBaseModel):
-    prompt: str = Field(min_length=1)
-    context: str | None = None
+    prompt: str | None = None
+    context: AiContextScope | None = None
+    context_text: str | None = None
+    feature: AiFeature = "custom"
+    tone: Literal["professional", "friendly", "confident", "concise"] | None = None
+    summary_length: Literal["short", "medium", "long"] | None = None
+    summary_format: Literal["paragraph", "bullets"] | None = None
+
+    @model_validator(mode="after")
+    def validate_ai_request(self) -> "AiSuggestRequest":
+        if self.feature == "custom" and not (self.prompt or "").strip():
+            raise ValueError("prompt is required for a custom assistant request")
+        return self
+
+
+class AiDecisionRequest(ApiBaseModel):
+    status: AiDecisionStatus
 
 
 class CreateShareLinkRequest(ApiBaseModel):
@@ -165,7 +188,12 @@ class AiHistoryResponse(ApiBaseModel):
 
 
 class AiSuggestResponse(ApiBaseModel):
+    interaction_id: int
     suggestion: str
+    model: str
+    status: str
+    feature: AiFeature
+    context_preview: str
 
 
 class DocumentSessionResponse(ApiBaseModel):

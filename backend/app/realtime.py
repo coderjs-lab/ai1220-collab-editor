@@ -5,7 +5,7 @@ from typing import Any
 from urllib.parse import parse_qs
 
 import y_py as Y
-from anyio import TASK_STATUS_IGNORED, create_task_group
+from anyio import TASK_STATUS_IGNORED, create_task_group, sleep
 from anyio.abc import TaskStatus
 from fastapi import WebSocket, WebSocketDisconnect
 from ypy_websocket import WebsocketServer, YRoom
@@ -58,33 +58,45 @@ class CollaborationRoom(YRoom):
         super().__init__(ready=True, ystore=ystore, log=log)
         self.room_name = room_name
         self._loaded = False
+        self._cleaned_up = False
 
     async def start(self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
-        if self._starting:
+        if self.started.is_set():
+            task_status.started()
             return
-        else:
-            self._starting = True
+
+        if self._starting:
+            await self.started.wait()
+            task_status.started()
+            return
+
+        self._starting = True
 
         if self._task_group is not None:
+            self._starting = False
             raise RuntimeError("YRoom already running")
 
-        async with create_task_group() as self._task_group:
-            if self.ystore is not None and not self.ystore.started.is_set():
-                await self._task_group.start(self.ystore.start)
+        try:
+            async with create_task_group() as self._task_group:
+                if self.ystore is not None and not self.ystore.started.is_set():
+                    await self._task_group.start(self.ystore.start)
 
-            if self.ystore is not None and not self._loaded:
-                try:
-                    async for update, _metadata, _timestamp in self.ystore.read():
-                        if update:
-                            Y.apply_update(self.ydoc, update)
-                except YDocNotFound:
-                    pass
-                self._loaded = True
+                if self.ystore is not None and not self._loaded:
+                    try:
+                        async for update, _metadata, _timestamp in self.ystore.read():
+                            if update:
+                                Y.apply_update(self.ydoc, update)
+                    except YDocNotFound:
+                        pass
+                    self._loaded = True
 
-            self._task_group.start_soon(self._broadcast_updates)
-            self.started.set()
+                self._task_group.start_soon(self._broadcast_updates)
+                self.started.set()
+                self._starting = False
+                task_status.started()
+        except BaseException:
             self._starting = False
-            task_status.started()
+            raise
 
     async def serve(self, websocket: CollaborationSocket):
         async with create_task_group() as task_group:
@@ -112,6 +124,32 @@ class CollaborationRoom(YRoom):
             finally:
                 self.clients = [client for client in self.clients if client != websocket]
 
+    async def shutdown(self) -> None:
+        if self._cleaned_up:
+            return
+
+        if self._task_group is not None:
+            self.stop()
+            await sleep(0)
+
+        if self.ystore is not None and self.ystore._task_group is not None:
+            self.ystore.stop()
+            await sleep(0)
+
+        self.clients.clear()
+        self._on_message = None
+        self._loaded = False
+
+        self._update_send_stream.close()
+        await self._update_receive_stream.aclose()
+
+        # Drop Yjs state on the event-loop thread that created it so pytest
+        # teardown does not end up finalizing the document from another thread.
+        self.awareness = None
+        self.ydoc = None
+        self.ystore = None
+        self._cleaned_up = True
+
 
 class CollaborationServer(WebsocketServer):
     async def get_room(self, name: str) -> CollaborationRoom:
@@ -124,6 +162,37 @@ class CollaborationServer(WebsocketServer):
         room = self.rooms[name]
         await self.start_room(room)
         return room
+
+    async def delete_room_async(
+        self, *, name: str | None = None, room: CollaborationRoom | None = None
+    ) -> None:
+        if name is not None and room is not None:
+            raise RuntimeError("Cannot pass name and room")
+
+        if name is None:
+            assert room is not None
+            name = self.get_room_name(room)
+
+        room = self.rooms.pop(name)
+        await room.shutdown()
+
+    async def _serve(self, websocket: CollaborationSocket, tg):
+        room = await self.get_room(websocket.path)
+        await self.start_room(room)
+        await room.serve(websocket)
+
+        if self.auto_clean_rooms and not room.clients:
+            await self.delete_room_async(room=room)
+
+        tg.cancel_scope.cancel()
+
+    async def shutdown(self) -> None:
+        for room_name in list(self.rooms.keys()):
+            await self.delete_room_async(name=room_name)
+
+        if self._task_group is not None:
+            self.stop()
+            await sleep(0)
 
 
 def room_path(document_id: int) -> str:

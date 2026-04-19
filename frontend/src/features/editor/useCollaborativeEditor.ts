@@ -230,7 +230,9 @@ export function useCollaborativeEditor({
   const [isDirty, setIsDirty] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
   const [plainText, setPlainText] = useState('');
+  const [selectionText, setSelectionText] = useState('');
   const [offlineHydrationReady, setOfflineHydrationReady] = useState(false);
+  const [canUndoAiApply, setCanUndoAiApply] = useState(false);
 
   const ydoc = useMemo(() => new Y.Doc(), [documentId]);
   const lastSavedTitleRef = useRef(document?.title ?? '');
@@ -244,6 +246,7 @@ export function useCollaborativeEditor({
   const isPersistingRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
   const typingResetTimerRef = useRef<number | null>(null);
+  const lastAiSnapshotRef = useRef<RichTextContent | null>(null);
 
   const userDescriptor = useMemo(
     () => ({
@@ -272,11 +275,14 @@ export function useCollaborativeEditor({
     lastSavedContentRef.current = JSON.stringify(document?.content ?? defaultRichTextContent());
     currentJsonRef.current = document?.content ?? defaultRichTextContent();
     setPlainText(richTextToPlainText(document?.content ?? defaultRichTextContent()));
+    setSelectionText('');
     setIsDirty(false);
     setSaveState('idle');
     setSaveError(null);
     setSaveMessage(null);
     pendingPersistRef.current = false;
+    lastAiSnapshotRef.current = null;
+    setCanUndoAiApply(false);
   }, [document?.id, document?.updated_at]);
 
   const provider = useMemo(() => {
@@ -397,6 +403,8 @@ export function useCollaborativeEditor({
         const json = nextEditor.getJSON() as RichTextContent;
         currentJsonRef.current = json;
         setPlainText(richTextToPlainText(json));
+        const { from, to } = nextEditor.state.selection;
+        setSelectionText(nextEditor.state.doc.textBetween(from, to, '\n\n'));
       },
       onUpdate({ editor: nextEditor }) {
         const json = nextEditor.getJSON() as RichTextContent;
@@ -509,7 +517,11 @@ export function useCollaborativeEditor({
       return;
     }
 
-    const handleSelection = () => updateLocalActivity(editor.isFocused ? 'active' : 'idle', false);
+    const handleSelection = () => {
+      const { from, to } = editor.state.selection;
+      setSelectionText(editor.state.doc.textBetween(from, to, '\n\n'));
+      updateLocalActivity(editor.isFocused ? 'active' : 'idle', false);
+    };
     const handleFocus = () => updateLocalActivity('active');
     const handleBlur = () => updateLocalActivity('idle', false);
 
@@ -667,6 +679,8 @@ export function useCollaborativeEditor({
       setSaveState('idle');
       setSaveError(null);
       setSaveMessage(null);
+      lastAiSnapshotRef.current = null;
+      setCanUndoAiApply(false);
 
       if (!editor) {
         return;
@@ -748,7 +762,20 @@ export function useCollaborativeEditor({
       return;
     }
 
+    lastAiSnapshotRef.current = JSON.parse(JSON.stringify(currentJsonRef.current)) as RichTextContent;
+    setCanUndoAiApply(true);
     editor.commands.setContent(plainTextToRichText(suggestion));
+  }
+
+  function replaceSelectionWithSuggestion(suggestion: string) {
+    if (!editor || !canEdit) {
+      return;
+    }
+
+    lastAiSnapshotRef.current = JSON.parse(JSON.stringify(currentJsonRef.current)) as RichTextContent;
+    setCanUndoAiApply(true);
+    const nextContent = plainTextToRichText(suggestion).content ?? [];
+    editor.chain().focus().insertContent(nextContent).run();
   }
 
   function appendSuggestion(suggestion: string) {
@@ -756,9 +783,21 @@ export function useCollaborativeEditor({
       return;
     }
 
+    lastAiSnapshotRef.current = JSON.parse(JSON.stringify(currentJsonRef.current)) as RichTextContent;
+    setCanUndoAiApply(true);
     const existing = richTextToPlainText(currentJsonRef.current).trim();
     const next = existing.length > 0 ? `${existing}\n\n${suggestion}` : suggestion;
     editor.commands.setContent(plainTextToRichText(next));
+  }
+
+  function undoLastAiApply() {
+    if (!editor || !canEdit || !lastAiSnapshotRef.current) {
+      return;
+    }
+
+    editor.commands.setContent(lastAiSnapshotRef.current, false);
+    lastAiSnapshotRef.current = null;
+    setCanUndoAiApply(false);
   }
 
   function clearTransientSaveState() {
@@ -779,10 +818,14 @@ export function useCollaborativeEditor({
     saveMessage,
     isDirty,
     plainText,
+    selectionText,
+    canUndoAiApply,
     persistSnapshot,
     applyServerDocument,
     replaceWithSuggestion,
+    replaceSelectionWithSuggestion,
     appendSuggestion,
+    undoLastAiApply,
     clearTransientSaveState,
   };
 }

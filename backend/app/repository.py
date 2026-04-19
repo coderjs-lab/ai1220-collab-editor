@@ -288,21 +288,161 @@ def list_versions(connection: sqlite3.Connection, document_id: int) -> list[dict
 
 
 def insert_ai_interaction(
-    connection: sqlite3.Connection, document_id: int, user_id: int, prompt: str, response: str
+    connection: sqlite3.Connection,
+    document_id: int,
+    user_id: int,
+    prompt: str,
+    response: str,
+    *,
+    model: str | None = None,
+    status: str | None = None,
+    feature: str | None = None,
+    context_scope: str | None = None,
+    context_preview: str | None = None,
+    resolved_prompt: str | None = None,
 ) -> None:
     connection.execute(
         """
-        INSERT INTO ai_interactions (document_id, user_id, prompt, response)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO ai_interactions (
+            document_id,
+            user_id,
+            prompt,
+            response,
+            model,
+            status,
+            feature,
+            context_scope,
+            context_preview,
+            resolved_prompt
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (document_id, user_id, prompt, response),
+        (
+            document_id,
+            user_id,
+            prompt,
+            response,
+            model,
+            status,
+            feature,
+            context_scope,
+            context_preview,
+            resolved_prompt,
+        ),
     )
+
+
+def create_ai_interaction(
+    connection: sqlite3.Connection,
+    *,
+    document_id: int,
+    user_id: int,
+    prompt: str,
+    model: str,
+    status: str,
+    feature: str,
+    context_scope: str,
+    context_preview: str,
+    resolved_prompt: str,
+) -> int:
+    cursor = connection.execute(
+        """
+        INSERT INTO ai_interactions (
+            document_id,
+            user_id,
+            prompt,
+            response,
+            model,
+            status,
+            feature,
+            context_scope,
+            context_preview,
+            resolved_prompt
+        )
+        VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            document_id,
+            user_id,
+            prompt,
+            model,
+            status,
+            feature,
+            context_scope,
+            context_preview,
+            resolved_prompt,
+        ),
+    )
+    return int(cursor.lastrowid)
+
+
+def update_ai_interaction_result(
+    connection: sqlite3.Connection,
+    *,
+    interaction_id: int,
+    response: str | None,
+    status: str,
+    error_message: str | None,
+) -> None:
+    connection.execute(
+        """
+        UPDATE ai_interactions
+        SET response = ?, status = ?, error_message = ?
+        WHERE id = ?
+        """,
+        (response, status, error_message, interaction_id),
+    )
+
+
+def find_ai_interaction(
+    connection: sqlite3.Connection, document_id: int, interaction_id: int
+) -> sqlite3.Row | None:
+    return connection.execute(
+        """
+        SELECT *
+        FROM ai_interactions
+        WHERE document_id = ? AND id = ?
+        """,
+        (document_id, interaction_id),
+    ).fetchone()
+
+
+def set_ai_interaction_status(
+    connection: sqlite3.Connection,
+    *,
+    document_id: int,
+    interaction_id: int,
+    status: str,
+) -> bool:
+    row = find_ai_interaction(connection, document_id, interaction_id)
+    if row is None:
+        return False
+
+    connection.execute(
+        """
+        UPDATE ai_interactions
+        SET status = ?
+        WHERE document_id = ? AND id = ?
+        """,
+        (status, document_id, interaction_id),
+    )
+    return True
 
 
 def list_ai_history(connection: sqlite3.Connection, document_id: int) -> list[dict[str, Any]]:
     rows = connection.execute(
         """
-        SELECT ai.id, ai.prompt, ai.response, ai.created_at, u.username
+        SELECT
+            ai.id,
+            ai.prompt,
+            ai.response,
+            ai.created_at,
+            ai.model,
+            ai.status,
+            ai.feature,
+            ai.context_scope,
+            ai.context_preview,
+            u.username
         FROM ai_interactions ai
         JOIN users u ON u.id = ai.user_id
         WHERE ai.document_id = ?

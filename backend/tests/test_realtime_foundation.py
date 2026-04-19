@@ -13,6 +13,9 @@ def load_app(tmp_path: Path):
     os.environ["YSTORE_PATH"] = str(tmp_path / "yupdates.db")
     os.environ["JWT_SECRET"] = "test-secret-key-for-realtime-suite-with-safe-length-123456"
     os.environ["WS_BASE_URL"] = "ws://testserver/ws/collab"
+    os.environ["AI_PROVIDER"] = "stub"
+    os.environ["AI_MODEL"] = "draftboard-stub-v1"
+    os.environ.pop("ANTHROPIC_API_KEY", None)
 
     for module_name in list(sys.modules):
         if module_name == "backend.app" or module_name.startswith("backend.app."):

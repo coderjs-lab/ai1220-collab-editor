@@ -26,9 +26,8 @@ async def lifespan(app: FastAPI):
         app.state.collaboration_server = collaboration_server
         yield
         if collaboration_server.started.is_set():
-            for room_name in list(collaboration_server.rooms.keys()):
-                collaboration_server.delete_room(name=room_name)
-            collaboration_server.stop()
+            await collaboration_server.shutdown()
+        app.state.collaboration_server = None
 
 
 app = FastAPI(

@@ -51,6 +51,13 @@ CREATE TABLE IF NOT EXISTS ai_interactions (
   user_id INTEGER NOT NULL REFERENCES users(id),
   prompt TEXT NOT NULL,
   response TEXT,
+  model TEXT,
+  status TEXT,
+  feature TEXT,
+  context_scope TEXT,
+  context_preview TEXT,
+  resolved_prompt TEXT,
+  error_message TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -78,10 +85,20 @@ CREATE TABLE IF NOT EXISTS share_links (
 def init_database() -> None:
     settings.db_path.parent.mkdir(parents=True, exist_ok=True)
     settings.ystore_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(settings.db_path) as connection:
+    connection = sqlite3.connect(settings.db_path)
+    try:
         connection.executescript(SCHEMA)
         _ensure_column(connection, "versions", "restored_from", "INTEGER REFERENCES versions(id)")
+        _ensure_column(connection, "ai_interactions", "model", "TEXT")
+        _ensure_column(connection, "ai_interactions", "status", "TEXT")
+        _ensure_column(connection, "ai_interactions", "feature", "TEXT")
+        _ensure_column(connection, "ai_interactions", "context_scope", "TEXT")
+        _ensure_column(connection, "ai_interactions", "context_preview", "TEXT")
+        _ensure_column(connection, "ai_interactions", "resolved_prompt", "TEXT")
+        _ensure_column(connection, "ai_interactions", "error_message", "TEXT")
         connection.commit()
+    finally:
+        connection.close()
 
 
 def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:

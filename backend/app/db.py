@@ -26,9 +26,12 @@ def init_db(reset: bool = False) -> None:
         if reset and database_path.exists():
             database_path.unlink()
 
-    with create_connection() as connection:
+    connection = create_connection()
+    try:
         connection.executescript(SCHEMA_PATH.read_text(encoding='utf-8'))
         connection.commit()
+    finally:
+        connection.close()
 
 
 def get_db() -> Generator[sqlite3.Connection, None, None]:

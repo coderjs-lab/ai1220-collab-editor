@@ -1,4 +1,10 @@
 export type RichTextContent = Record<string, unknown>;
+export type AiFeature = 'rewrite' | 'summarize' | 'expand' | 'fix_grammar' | 'custom';
+export type AiContextScope = 'selection' | 'section' | 'document';
+export type AiDecisionStatus = 'accepted' | 'rejected' | 'partial' | 'edited';
+export type AiRewriteTone = 'professional' | 'friendly' | 'confident' | 'concise';
+export type AiSummaryLength = 'short' | 'medium' | 'long';
+export type AiSummaryFormat = 'paragraph' | 'bullets';
 
 export interface ApiUser {
   id: number;
@@ -49,6 +55,9 @@ export interface ApiAiHistoryItem {
   username: string;
   model?: string | null;
   status?: string | null;
+  feature?: AiFeature | null;
+  context_scope?: AiContextScope | null;
+  context_preview?: string | null;
 }
 
 export interface AuthResponse {
@@ -107,12 +116,35 @@ export interface UpdateDocumentRequest {
 }
 
 export interface AiSuggestRequest {
-  prompt: string;
-  context?: string;
+  prompt?: string;
+  context?: AiContextScope;
+  context_text?: string;
+  feature?: AiFeature;
+  tone?: AiRewriteTone;
+  summary_length?: AiSummaryLength;
+  summary_format?: AiSummaryFormat;
 }
 
 export interface AiSuggestResponse {
+  interaction_id: number;
   suggestion: string;
+  model: string;
+  status: string;
+  feature: AiFeature;
+  context_preview: string;
+}
+
+export interface AiSuggestionStreamMeta {
+  interaction_id: number;
+  model: string;
+  feature: AiFeature;
+  context_scope?: AiContextScope;
+  context_preview: string;
+  status: string;
+}
+
+export interface AiDecisionRequest {
+  status: AiDecisionStatus;
 }
 
 export interface ShareDocumentRequest {

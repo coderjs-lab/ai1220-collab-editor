@@ -42,7 +42,11 @@ CREATE TABLE IF NOT EXISTS ai_interactions (
   response    TEXT,
   model       TEXT,
   status      TEXT    NOT NULL DEFAULT 'generated',
-  context     TEXT,
+  feature     TEXT,
+  context_scope TEXT,
+  context_preview TEXT,
+  resolved_prompt TEXT,
+  error_message TEXT,
   created_at  TEXT    NOT NULL
 );
 

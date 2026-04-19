@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -14,6 +15,9 @@ def load_app(tmp_path: Path):
     os.environ["JWT_SECRET"] = "test-secret-key-for-api-suite-with-safe-length-123456"
     os.environ["WS_BASE_URL"] = "ws://testserver/ws/collab"
     os.environ["REFRESH_COOKIE_NAME"] = "draftboard_refresh"
+    os.environ["AI_PROVIDER"] = "stub"
+    os.environ["AI_MODEL"] = "draftboard-stub-v1"
+    os.environ.pop("ANTHROPIC_API_KEY", None)
 
     for module_name in list(sys.modules):
         if module_name == "backend.app" or module_name.startswith("backend.app."):
@@ -41,6 +45,27 @@ def sample_content(text: str):
         "type": "doc",
         "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
     }
+
+
+def parse_sse_events(raw_body: str):
+    events: list[tuple[str, dict[str, object]]] = []
+    for raw_event in raw_body.strip().split("\n\n"):
+        if not raw_event.strip():
+            continue
+
+        event_name = "message"
+        data_lines: list[str] = []
+        for line in raw_event.splitlines():
+            if line.startswith("event:"):
+                event_name = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line.split(":", 1)[1].strip())
+
+        if not data_lines:
+            continue
+
+        events.append((event_name, json.loads("\n".join(data_lines))))
+    return events
 
 
 def test_register_login_refresh_and_logout(tmp_path: Path):
@@ -220,11 +245,16 @@ def test_ai_permissions_and_history(tmp_path: Path):
 
         allowed_ai = client.post(
             f"/api/documents/{document_id}/ai/suggest",
-            json={"prompt": "Summarize this", "context": "document"},
+            json={"feature": "summarize", "prompt": "Summarize this", "context": "document"},
             headers=auth_headers(owner["token"]),
         )
         assert allowed_ai.status_code == 200
-        assert "Prompt: Summarize this" in allowed_ai.json()["suggestion"]
+        payload = allowed_ai.json()
+        assert payload["interaction_id"] > 0
+        assert payload["feature"] == "summarize"
+        assert payload["model"]
+        assert payload["context_preview"]
+        assert payload["suggestion"]
 
         history_response = client.get(
             f"/api/documents/{document_id}/ai/history",
@@ -232,6 +262,60 @@ def test_ai_permissions_and_history(tmp_path: Path):
         )
         assert history_response.status_code == 200
         assert history_response.json()["history"][0]["username"] == "owner"
+        assert history_response.json()["history"][0]["feature"] == "summarize"
+        assert history_response.json()["history"][0]["status"] == "generated"
+        assert history_response.json()["history"][0]["context_scope"] == "document"
+        assert "Document excerpt:" in history_response.json()["history"][0]["context_preview"]
+
+
+def test_ai_streaming_and_decision_tracking(tmp_path: Path):
+    app = load_app(tmp_path)
+
+    with TestClient(app) as client:
+        owner = register_user(client, username="owner", email="owner@example.com")
+
+        document_id = client.post(
+            "/api/documents",
+            json={"title": "Stream test", "content": sample_content("Please rewrite this introduction with clearer wording.")},
+            headers=auth_headers(owner["token"]),
+        ).json()["document"]["id"]
+
+        with client.stream(
+            "POST",
+            f"/api/documents/{document_id}/ai/suggest/stream",
+            json={"feature": "rewrite", "context": "selection", "context_text": "Please rewrite this introduction with clearer wording."},
+            headers=auth_headers(owner["token"]),
+        ) as response:
+            assert response.status_code == 200, response.text
+            raw_body = "".join(response.iter_text())
+
+        events = parse_sse_events(raw_body)
+        event_names = [name for name, _ in events]
+        assert "meta" in event_names
+        assert "chunk" in event_names
+        assert "done" in event_names
+
+        meta_payload = next(payload for name, payload in events if name == "meta")
+        interaction_id = int(meta_payload["interaction_id"])
+        assert interaction_id > 0
+        assert meta_payload["feature"] == "rewrite"
+        assert meta_payload["context_preview"]
+
+        decision_response = client.post(
+            f"/api/documents/{document_id}/ai/history/{interaction_id}/decision",
+            json={"status": "accepted"},
+            headers=auth_headers(owner["token"]),
+        )
+        assert decision_response.status_code == 200, decision_response.text
+
+        history_response = client.get(
+            f"/api/documents/{document_id}/ai/history",
+            headers=auth_headers(owner["token"]),
+        )
+        assert history_response.status_code == 200
+        assert history_response.json()["history"][0]["status"] == "accepted"
+        assert history_response.json()["history"][0]["context_scope"] == "selection"
+        assert "Please rewrite this introduction" in history_response.json()["history"][0]["context_preview"]
 
 
 def test_collaboration_session_and_websocket_handshake(tmp_path: Path):

@@ -39,6 +39,10 @@ class Settings:
     refresh_token_days: int
     refresh_cookie_name: str
     secure_cookies: bool
+    ai_provider: str
+    ai_model: str
+    ai_max_output_tokens: int
+    anthropic_api_key: str | None
 
 
 def get_settings() -> Settings:
@@ -57,6 +61,13 @@ def get_settings() -> Settings:
         refresh_token_days=int(os.getenv("REFRESH_TOKEN_DAYS", "7")),
         refresh_cookie_name=os.getenv("REFRESH_COOKIE_NAME", "draftboard_refresh"),
         secure_cookies=_bool_env("SECURE_COOKIES", False),
+        ai_provider=os.getenv(
+            "AI_PROVIDER",
+            "anthropic" if os.getenv("ANTHROPIC_API_KEY") else "stub",
+        ).strip().lower(),
+        ai_model=os.getenv("AI_MODEL", "draftboard-stub-v1"),
+        ai_max_output_tokens=int(os.getenv("AI_MAX_OUTPUT_TOKENS", "768")),
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
     )
 
 

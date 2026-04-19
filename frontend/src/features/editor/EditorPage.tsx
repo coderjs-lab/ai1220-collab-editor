@@ -34,11 +34,15 @@ type AccessRole = 'owner' | 'editor' | 'viewer';
 type ShareRole = 'viewer' | 'editor';
 type EditorSidebarTab = 'access' | 'history' | 'assistant' | 'collaboration';
 
-const sidebarTabs: Array<{ id: EditorSidebarTab; label: string }> = [
-  { id: 'access', label: 'Access' },
-  { id: 'history', label: 'History' },
-  { id: 'assistant', label: 'Assistant' },
-  { id: 'collaboration', label: 'Collab' },
+const sidebarTabs: Array<{
+  id: EditorSidebarTab;
+  label: string;
+  description: string;
+}> = [
+  { id: 'access', label: 'Access', description: 'People and shared links' },
+  { id: 'history', label: 'History', description: 'Versions and restores' },
+  { id: 'assistant', label: 'Assistant', description: 'AI drafting and review' },
+  { id: 'collaboration', label: 'Collab', description: 'Presence and session state' },
 ];
 
 function sortCollaborators(collaborators: ApiCollaborator[]) {
@@ -130,12 +134,7 @@ function ToolTabButton({
 }) {
   return (
     <button
-      className={[
-        'rounded-[16px] border px-3 py-1.5 text-[0.8rem] font-semibold transition',
-        isActive
-          ? 'border-[color:var(--border-strong)] bg-[color:var(--teal-soft)] text-teal-950 shadow-[0_10px_24px_rgba(15,118,110,0.08)]'
-          : 'border-[color:var(--border)] bg-white/75 text-[color:var(--text-soft)] hover:bg-white hover:text-[color:var(--text)]',
-      ].join(' ')}
+      className={`workspace-tool-pill${isActive ? ' is-active' : ''}`}
       onClick={onClick}
       type="button"
     >
@@ -495,7 +494,6 @@ export function EditorPage() {
 
   const canEdit = permission === 'owner' || permission === 'editor';
   const canInvokeAi = permission === 'owner' || permission === 'editor';
-  const ai = useDocumentAi(document ? String(document.id) : null);
   const collaborationSession = useCollaborationSession(document ? String(document.id) : null);
   const collaborativeEditor = useCollaborativeEditor({
     documentId: document ? String(document.id) : null,
@@ -510,6 +508,11 @@ export function EditorPage() {
       setVersionsReloadKey((current) => current + 1);
     },
   });
+  const ai = useDocumentAi(
+    document ? String(document.id) : null,
+    collaborativeEditor.selectionText,
+    collaborativeEditor.plainText,
+  );
   const isDirty = collaborativeEditor.isDirty;
   const wordCount = countWords(collaborativeEditor.plainText);
   const characterCount = collaborativeEditor.plainText.length;
@@ -936,26 +939,45 @@ export function EditorPage() {
         <AIAssistantPanel
           canApplySuggestion={canEdit && collaborativeEditor.saveState !== 'saving'}
           canInvoke={canInvokeAi}
+          canUndoAiApply={collaborativeEditor.canUndoAiApply}
           context={ai.context}
           embedded
+          feature={ai.feature}
+          hasSelectionContext={ai.hasSelectionContext}
           history={ai.history}
           historyError={ai.historyError}
           isLoadingHistory={ai.isLoadingHistory}
           isSuggesting={ai.isSuggesting}
           lastPrompt={ai.lastPrompt}
+          lastModel={ai.lastModel}
+          onApplySelectedFragment={handleApplySuggestionFragment}
           onAppendSuggestion={handleAppendSuggestion}
+          onApplyAcceptedParts={handleApplyAcceptedSuggestion}
           onContextChange={ai.setContext}
+          onFeatureChange={ai.setFeature}
+          onCancel={ai.cancelSuggestion}
           onDismissSuggestion={ai.clearSuggestion}
           onPromptChange={ai.setPrompt}
+          onRejectSuggestion={handleRejectSuggestion}
           onReplaceDraft={handleReplaceWithSuggestion}
+          onReplaceSelection={handleReplaceSelectionWithSuggestion}
           onRetryHistory={ai.reloadHistory}
+          onSuggestionChange={ai.setSuggestion}
+          onSummaryFormatChange={ai.setSummaryFormat}
+          onSummaryLengthChange={ai.setSummaryLength}
           onSubmit={() => {
             void ai.submitSuggestion();
           }}
+          onToneChange={ai.setTone}
+          onUndoApply={collaborativeEditor.undoLastAiApply}
           prompt={ai.prompt}
           promptError={ai.promptError}
+          suggestionSourceText={ai.suggestionSourceText}
           suggestError={ai.suggestError}
           suggestion={ai.suggestion}
+          summaryFormat={ai.summaryFormat}
+          summaryLength={ai.summaryLength}
+          tone={ai.tone}
         />
       );
     }
@@ -980,11 +1002,47 @@ export function EditorPage() {
   function handleReplaceWithSuggestion(suggestion: string) {
     resetTransientMessages();
     collaborativeEditor.replaceWithSuggestion(suggestion);
+    void ai.recordDecision(ai.isSuggestionEdited ? 'edited' : 'accepted');
   }
 
   function handleAppendSuggestion(suggestion: string) {
     resetTransientMessages();
     collaborativeEditor.appendSuggestion(suggestion);
+    void ai.recordDecision(ai.isSuggestionEdited ? 'edited' : 'accepted');
+  }
+
+  function handleReplaceSelectionWithSuggestion(suggestion: string) {
+    resetTransientMessages();
+    collaborativeEditor.replaceSelectionWithSuggestion(suggestion);
+    void ai.recordDecision(ai.isSuggestionEdited ? 'edited' : 'accepted');
+  }
+
+  function handleApplySuggestionFragment(fragment: string) {
+    resetTransientMessages();
+    collaborativeEditor.replaceSelectionWithSuggestion(fragment);
+    void ai.recordDecision('partial');
+  }
+
+  function handleApplyAcceptedSuggestion(
+    suggestion: string,
+    mode: 'replace-selection' | 'replace-draft' | 'append',
+  ) {
+    resetTransientMessages();
+
+    if (mode === 'replace-selection') {
+      collaborativeEditor.replaceSelectionWithSuggestion(suggestion);
+    } else if (mode === 'replace-draft') {
+      collaborativeEditor.replaceWithSuggestion(suggestion);
+    } else {
+      collaborativeEditor.appendSuggestion(suggestion);
+    }
+
+    void ai.recordDecision('partial');
+  }
+
+  function handleRejectSuggestion() {
+    void ai.recordDecision('rejected');
+    ai.clearSuggestion();
   }
 
   if (loadState === 'loading') {
@@ -1178,14 +1236,14 @@ export function EditorPage() {
 
         <aside className="self-start xl:sticky xl:top-6">
           <section className="shell-card rounded-[32px] p-4 sm:p-5">
-            <div className="space-y-3">
-              <div>
+            <div className="space-y-4">
+              <div className="space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--text-soft)]">
                   Workspace tools
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="workspace-tool-grid">
                 {sidebarTabs.map((tab) => (
                   <ToolTabButton
                     key={tab.id}
@@ -1196,7 +1254,7 @@ export function EditorPage() {
                 ))}
               </div>
 
-              <div className="xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
+              <div className="workspace-tool-panel xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
                 {renderSidebarPanel()}
               </div>
             </div>

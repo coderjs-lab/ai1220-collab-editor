@@ -9,22 +9,22 @@ export default defineConfig({
   fullyParallel: false,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: 'off',
   },
   webServer: [
     {
       command:
-        "cd ../backend && rm -f data/playwright-editor.db data/playwright-yupdates.db && JWT_SECRET='playwright-secret-key-with-safe-length-123456' DB_PATH=./data/playwright-editor.db YSTORE_PATH=./data/playwright-yupdates.db CORS_ORIGIN='http://127.0.0.1:5173,http://localhost:5173' WS_BASE_URL='ws://127.0.0.1:3001/ws/collab' .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 3001",
-      port: 3001,
+        "cd ../backend && rm -f data/playwright-editor.db data/playwright-yupdates.db && JWT_SECRET='playwright-secret-key-with-safe-length-123456' DB_PATH=./data/playwright-editor.db YSTORE_PATH=./data/playwright-yupdates.db CORS_ORIGIN='http://127.0.0.1:4173,http://localhost:4173' WS_BASE_URL='ws://127.0.0.1:4001/ws/collab' AI_PROVIDER='stub' AI_MODEL='draftboard-stub-v1' .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 4001",
+      port: 4001,
       reuseExistingServer: false,
       timeout: 30_000,
     },
     {
-      command: 'npm run dev -- --host 127.0.0.1 --port 5173',
-      port: 5173,
+      command: "VITE_API_BASE_URL='http://127.0.0.1:4001/api' npm run dev -- --host 127.0.0.1 --port 4173",
+      port: 4173,
       reuseExistingServer: false,
       timeout: 30_000,
     },
