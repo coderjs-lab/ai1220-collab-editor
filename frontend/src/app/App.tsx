@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { Suspense, lazy, type ReactElement } from 'react';
 import {
   BrowserRouter,
   Link,
@@ -9,10 +9,26 @@ import {
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { EmptyState } from '../components/EmptyState';
-import { AuthPage } from '../features/auth/AuthPage';
-import { AcceptShareLinkPage } from '../features/documents/AcceptShareLinkPage';
-import { DocumentsPage } from '../features/documents/DocumentsPage';
-import { EditorPage } from '../features/editor/EditorPage';
+
+const AuthPage = lazy(async () => {
+  const module = await import('../features/auth/AuthPage');
+  return { default: module.AuthPage };
+});
+
+const AcceptShareLinkPage = lazy(async () => {
+  const module = await import('../features/documents/AcceptShareLinkPage');
+  return { default: module.AcceptShareLinkPage };
+});
+
+const DocumentsPage = lazy(async () => {
+  const module = await import('../features/documents/DocumentsPage');
+  return { default: module.DocumentsPage };
+});
+
+const EditorPage = lazy(async () => {
+  const module = await import('../features/editor/EditorPage');
+  return { default: module.EditorPage };
+});
 
 function FullScreenLoader() {
   return (
@@ -98,50 +114,52 @@ function NotFoundPage() {
 
 function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/" element={<RootRedirect />} />
-      <Route
-        path="/login"
-        element={
-          <PublicOnlyRoute>
-            <AuthPage mode="login" />
-          </PublicOnlyRoute>
-        }
-      />
-      <Route
-        path="/register"
-        element={
-          <PublicOnlyRoute>
-            <AuthPage mode="register" />
-          </PublicOnlyRoute>
-        }
-      />
-      <Route
-        path="/documents"
-        element={
-          <ProtectedRoute>
-            <DocumentsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/documents/:id"
-        element={
-          <ProtectedRoute>
-            <EditorPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/share/:token"
-        element={
-          <ProtectedRoute>
-            <AcceptShareLinkPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+    <Suspense fallback={<FullScreenLoader />}>
+      <Routes>
+        <Route path="/" element={<RootRedirect />} />
+        <Route
+          path="/login"
+          element={
+            <PublicOnlyRoute>
+              <AuthPage mode="login" />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <PublicOnlyRoute>
+              <AuthPage mode="register" />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/documents"
+          element={
+            <ProtectedRoute>
+              <DocumentsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/documents/:id"
+          element={
+            <ProtectedRoute>
+              <EditorPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/share/:token"
+          element={
+            <ProtectedRoute>
+              <AcceptShareLinkPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Suspense>
   );
 }
 
